@@ -1,0 +1,663 @@
+<script>
+//Import from vuejs
+const NUMBER_STYLE = {{{import_total_style}}};
+const VERSION = '{{{import_version}}}';
+const ADSENSE_ACCOUNT = '{{{import_adsense_account}}}';
+const HLINK = '{{{import_hlink}}}';
+const HNAME = '{{{import_hname}}}';
+const HVALUE = '{{{import_hvalue}}}';
+const ORIGINAL_ID = "{{{import_original_id}}}";
+const UPDATE_IDS = {{{import_update_ids}}};
+const DEBUG = {{{import_debug}}};
+
+console.info("DEBUG: " + DEBUG);
+
+const MODE = '{{{import_mode}}}';
+const MODE_CREATE = MODE === "create";
+const MODE_UPDATE = MODE === "update";
+
+const MODE_COPY = '{{{import_mode_copy}}}';
+const PAYLOAD = {{{import_payload}}};
+const SKIP_SHOPPING = '{{{import_skip_shopping}}}';
+const GENERATION = '{{{import_generation}}}';
+
+const MODE_COPY_PAYLOAD = MODE_COPY === "copy";
+const MODE_UPDATE_OTHER_ACCOUNT = MODE_COPY === "update_account";
+
+console.info("MODE_CREATE: " + MODE_CREATE);
+console.info("MODE_UPDATE: " + MODE_UPDATE);
+
+const TIME_SLEEP = 1e2, TIME_SLEEP_UPDATE_DB = 2e3, MAX_RETRIES_UPDATE_DB = 5, TIME_SLEEP_UPDATE_GOOGLE = 2e3, MAX_RETRIES_GOOGLE = 3; let notifyDiv = null, divDone = null, divCopy = null;
+
+let statusJob = { created: 0, updated: 0, failed: 0 };
+let errIds = [];
+
+function getAdsenseId() { let t = window.location.href, e = t.split("pub-"); if (2 != e.length) return; let n = e[1].split("/"); if (n.length >= 1) return n[0] }
+
+function clearFixed() { let e = document.querySelectorAll(".fixed-div"); e.forEach(e => { e.remove() }) }
+
+function addFixedDivDoneToBody() { (divDone = document.createElement("div")).classList.add("fixed-div", "fixed-div-done"), divDone.textContent = "Status:" + " v" + VERSION, document.body.appendChild(divDone); var d = document.createElement("style"); d.textContent = ".fixed-div-done{position:fixed;top:200px;right:500px;width:200px;height:100px;background-color:#f0f0f0;border:1px solid #ccc;padding:10px;border-radius:5px;box-shadow:0 0 10px rgba(0,0,0,.2);z-index:9999;font-size:20px;color:green}", document.head.appendChild(d) } function addFixedDivToBody() { (notifyDiv = document.createElement("div")).classList.add("fixed-div", "fixed-div-notify"), notifyDiv.textContent = "Notify:", document.body.appendChild(notifyDiv); var d = document.createElement("style"); d.textContent = ".fixed-div-notify{position:fixed;top:200px;right:200px;width:200px;height:500px;overflow:scroll;background-color:#f0f0f0;border:1px solid #ccc;padding:10px;border-radius:5px;box-shadow:0 0 10px rgba(0,0,0,.2);z-index:9999}", document.head.appendChild(d) }
+
+function addFixedDivCopyToBody() { (divCopy = document.createElement("div")).classList.add("fixed-div", "fixed-div-copy"), divCopy.textContent = "Job", document.body.appendChild(divCopy); var d = document.createElement("style"); d.textContent = ".fixed-div-copy{position:fixed;top:400px;right:500px;width:200px;height:100px;cursor:pointer;background-color:#f0f0f0;border:1px solid #ccc;padding:10px;border-radius:5px;box-shadow:0 0 10px rgba(0,0,0,.2);z-index:9999;font-size:20px;color:green;word-wrap: break-word}", document.head.appendChild(d) }
+
+function loadJQuery() { var e = document.createElement("script"); e.src = "https://code.jquery.com/jquery-3.6.0.min.js", e.onload = function () { console.info("jQuery loaded successfully!"), $(document).ready(function () { setTimeout(() => { init() }, 5e3) }) }, document.head.appendChild(e) }
+
+async function sleep(e) { return new Promise(n => setTimeout(n, e)) } function dateNow() { var e, n = new Date, t = n.getDate(), r = n.getMonth() + 1; return n.getFullYear() + "-" + (r < 10 ? "0" : "") + r + "-" + (t < 10 ? "0" : "") + t }
+
+function isObject(t) { return !("object" != typeof t || Array.isArray(t)) && null !== t }
+
+function isEmpty(r) { for (var i in r) if (r.hasOwnProperty(i)) return !1; return JSON.stringify(r) === JSON.stringify({}) }
+
+function clone(input) { return JSON.parse(JSON.stringify(input)) };
+
+clearFixed(), addFixedDivToBody(), addFixedDivDoneToBody(), addFixedDivCopyToBody(""), loadJQuery();
+
+function notify(e) { console.info(e), notifyDiv.innerHTML += "<br>" + e }
+function status(status = "") { if (!status) { return; }; statusJob[status]++, divCopy.innerHTML = JSON.stringify(statusJob) }
+function done(e) { console.info(e), divDone.innerHTML += "<br>" + e }
+
+async function init() {
+  if (!MODE) {
+    done("Missing mode");
+    return;
+  }
+
+  if (MODE_COPY_PAYLOAD) {
+    //Copy payload ở account gốc
+    divCopy.textContent = "Getting payload...";
+  }
+
+  console.info("init" + " v" + VERSION + " " + (MODE_CREATE ? "create" : "update"));
+
+  let googleInfo = getGoogleInfo();
+
+  if (!googleInfo || googleInfo.err) { done(googleInfo.err); return; };
+
+  googleInfo.adsenseId = getAdsenseId();
+
+  if (!googleInfo.adsenseId) { done("Missing adsenseId"); return; };
+
+  if (googleInfo.adsenseId !== ADSENSE_ACCOUNT) { done("Please check adsense account: " + "get in url: " + googleInfo.adsenseId + ", in code: " + ADSENSE_ACCOUNT); return; };
+
+  if (!googleInfo.xsrfToken) { done("Missing xsrfToken"); return; };
+
+  console.info("googleInfo", googleInfo);
+
+  if (!ORIGINAL_ID) { done("Missing ORIGINAL_ID"); return; };
+
+  let dataStyleClone;
+
+  if (MODE_UPDATE_OTHER_ACCOUNT) {
+    //Account được copy sẽ lấy payload để tạo / update chứ không lấy theo id gốc
+    if (!PAYLOAD) { done("Missing payload"); return; };
+
+    try {
+      dataStyleClone = clone(PAYLOAD);
+    } catch (error) {
+      notify(error);
+      done("INVALID PAYLOAD");
+      return;
+    }
+    notify("Get payload success!");
+  } else {
+    try {
+      //Lấy dữ liệu từ style gốc
+      let res = await tryFunction(async function () { return await getOldDataById(ORIGINAL_ID, googleInfo) });
+
+      if (!res || !res["1"]["1"] || res["1"]["1"] !== ORIGINAL_ID) {
+        console.error(ORIGINAL_ID + " not found or something went wrong");
+        notify(ORIGINAL_ID + " not found or something went wrong");
+        return;
+      }
+      console.info("Get data " + ORIGINAL_ID + " success!");
+
+      dataStyleClone = {
+        base: {
+          "1": res["1"]["1"], //id
+          "2": res["1"]["2"],
+          "4": res["1"]["4"], //Tên
+          "7": addZeroValue(clone(res["1"]["7"])), //Các style set
+          "8": res["1"]["8"],  //1 là search, 2 là shopping, 4 là related
+          "10": res["1"]["10"],  //1 là active, 2 là archived
+          "11": clone(res["1"]["11"]),
+          "12": clone(res["1"]["12"]),
+        }, core: [], more: []
+      };
+
+      let moreInfo = clone(res["1"]["9"]["10"]);
+
+      const coreArray = ["Shopping style", "Related searches"];
+
+      for (let index = 0; index < moreInfo.length; index++) {
+        let res = await tryFunction(async function () { return await getOldDataById(moreInfo[index]["2"]["1"], googleInfo); });
+
+        if (!res || !res["1"]["1"] || res["1"]["1"] !== moreInfo[index]["2"]["1"]) {
+          console.error(moreInfo[index]["2"]["1"] + " not found or something went wrong");
+          notify(moreInfo[index]["2"]["1"] + " not found or something went wrong");
+          return;
+        }
+
+        let newData = {
+          "1": res["1"]["1"], //id
+          "2": res["1"]["2"],
+          "4": res["1"]["4"], //Tên
+          "7": addZeroValue(clone(res["1"]["7"])), //Các style set
+          "8": res["1"]["8"],  //1 là search, 2 là shopping, 4 là related
+          "10": res["1"]["10"],  //1 là active, 2 là archived
+          "11": res["1"]["11"],
+          "12": clone(res["1"]["12"]),
+        };
+
+
+        if (res["1"]["9"] && res["1"]["9"]["9"]) {
+          newData["9"] = { "9": res["1"]["9"]["9"] };
+        }
+
+        if (coreArray.includes(moreInfo[index]["2"]["2"])) {
+          //Bỏ qua shopping ads nếu không muốn tạo
+          if (moreInfo[index]["2"]["2"] == "Shopping style" && SKIP_SHOPPING === "on") {
+            continue;
+          }
+           
+          dataStyleClone.core.push(newData);
+        } else {
+          dataStyleClone.more.push(newData);
+        }
+
+        await sleep(TIME_SLEEP);
+      }
+    } catch (error) {
+      //Handle lỗi nếu repose google không trả về đúng -> dừng lại không thực hiện tiếp
+      done("Error" + error); return;
+    }
+  }
+
+  if (!dataStyleClone) { done("Missing dataStyleClone"); return; };
+  if (!dataStyleClone.base) { done("Missing dataStyleClone base"); return; };
+  if (!dataStyleClone.core || !dataStyleClone.core.length) { done("Missing dataStyleClone core"); return; };
+
+  console.info(dataStyleClone);
+
+  if (MODE_COPY_PAYLOAD) {
+    //Copy payload ở account gốc
+    divCopy.textContent = "Copy ready! Click here to copy!";
+    $(".fixed-div-copy").on("click", function () {
+      navigator.clipboard.writeText(JSON.stringify(dataStyleClone));
+      done("Copied!");
+    });
+    return;
+  }
+
+  let update_ids = UPDATE_IDS;
+
+  if (MODE_CREATE) {
+    for (let index = 0; index < NUMBER_STYLE; index++) {
+
+      try {
+        //Tạo style mới
+        
+        //const response = await tryFunction(async function () { return await saveStyle(googleInfo, dataStyleClone.base, { newName: true, shopping: true }); });
+        //Bỏ tạo shopping lúc đầu, lỗi 500 google
+        const response = await tryFunction(async function () { return await saveStyle(googleInfo, dataStyleClone.base, { newName: true }); });
+
+        if (!response || !response["1"] || !response["1"]["1"] || !response["1"]["4"]) {
+          notify("Error create style");
+          status("failed");
+          continue;
+        }
+        notify(response["1"]["4"] + " with id " + response["1"]["1"] + " created success!");
+        console.log(response);
+        //notifyResponse(response);
+
+        update_ids.push(response["1"]["1"]);
+        status("created");
+      } catch (error) {
+        notify("Error create style");
+        notify(error);
+        status("failed");
+        continue;
+      }
+    }
+  }
+
+  if (!update_ids || !update_ids.length) {
+    done("Missing update ids");
+    return;
+  }
+
+  await updateByIds(update_ids, googleInfo, dataStyleClone);
+
+  if (errIds.length != 0) {
+    console.info("Try again error ids: " + JSON.stringify(errIds));
+    statusJob.failed = 0;
+    const newUpdateIds = clone(errIds);
+    errIds = [];
+    await updateByIds(newUpdateIds, googleInfo, dataStyleClone);
+  }
+
+  if (errIds.length != 0) {
+    console.info("Can not update error ids: " + JSON.stringify(errIds));
+    notify("Can not update error ids: " + JSON.stringify(errIds));
+  }
+
+  done("Success!");
+}
+
+async function updateByIds(update_ids, googleInfo, dataStyleClone) {
+  loop1:
+  for (let index = 0; index < update_ids.length; index++) {
+    try {
+      //Lấy data cũ đảm bảo nó có tồn tại ở google adsense mới tiến hành update và lấy thêm thông tin id phụ
+      let res = await tryFunction(async function () { return await getOldDataById(update_ids[index], googleInfo); });
+
+      if (!res || !res["1"] || !res["1"]["1"] || res["1"]["1"] !== update_ids[index]) {
+        console.error(update_ids[index] + " not found or something went wrong [getOldDataById]");
+        notify(update_ids[index] + " not found or something went wrong [getOldDataById]");
+        notify("styleId: " + update_ids[index]);
+        status("failed");
+        errIds.push(update_ids[index]);
+        continue;
+      }
+
+      if (MODE_UPDATE) {
+        //Update style search default
+        const response = await tryFunction(async function () { return await saveStyle(googleInfo, dataStyleClone.base, { id: res["1"]["1"], newName: true }); });
+
+        if (!response || !response["1"] || !response["1"]["1"]) {
+          notify("Error update style [Update style search default]");
+          notify("styleId: " + update_ids[index]);
+          status("failed");
+          console.error(response);
+          errIds.push(update_ids[index]);
+          continue;
+        }
+        notifyResponse(response);
+      }
+
+      let cloneMoreDataOld = [];
+
+      if (res && res["1"] && res["1"]["9"] && res["1"]["9"]["10"]) {
+        cloneMoreDataOld = clone(res["1"]["9"]["10"]);
+      }
+
+      //Thực hiện với Shopping style, Related searches default trước
+      for (let index = 0; index < dataStyleClone.core.length; index++) {
+        const newClone = dataStyleClone.core[index];
+        if (newClone["8"] !== 2 && newClone["8"] !== 4) {
+          continue;
+        }
+        let objectStyle = {};
+
+        if (cloneMoreDataOld.length) {
+          if (newClone["8"] == 2 && newClone["4"] == "Shopping style") {
+            for (let i = 0; i < cloneMoreDataOld.length; i++) {
+              const old = cloneMoreDataOld[i];
+              if (old["4"] == 2 && old["2"]["2"] == "Shopping style") {
+                objectStyle = { id: old["2"]["1"] };
+                //Xóa bỏ phần tử đã được update
+                cloneMoreDataOld.splice(i, 1);
+                break;
+              }
+            }
+          }
+
+          if (newClone["8"] == 4 && newClone["4"] == "Related searches") {
+            for (let i = 0; i < cloneMoreDataOld.length; i++) {
+              const old = cloneMoreDataOld[i];
+              if (old["4"] == 4 && old["2"]["2"] == "Related searches") {
+                objectStyle = { id: old["2"]["1"] };
+                //Xóa bỏ phần tử đã được update
+                cloneMoreDataOld.splice(i, 1);
+                break;
+              }
+            }
+          }
+        }
+
+        const response = await tryFunction(async function () { return await saveStyle(googleInfo, changeStyleID(clone(newClone), res["1"]["1"]), objectStyle); });
+
+        if (!response || !response["1"] || !response["1"]["1"]) {
+          notify("Error update style" + "["+ newClone["4"] + "]");
+          notify("styleId: " + update_ids[index]);
+          status("failed");
+          errIds.push(update_ids[index]);
+          continue loop1;
+        }
+        notifyResponse(response);
+      }
+
+      //Xóa hết các conditional style cũ
+      if (cloneMoreDataOld.length) {
+        for (let index = 0; index < cloneMoreDataOld.length; index++) {
+          const element = cloneMoreDataOld[index];
+
+          if (!element["2"] || !element["2"]["1"]){
+            notify("Error delete conditional style id not found");
+            console.error(element);
+            notify("styleId: " + update_ids[index]);
+            status("failed");
+            errIds.push(update_ids[index]);
+            continue loop1;
+          }
+          try {
+            const err = await tryFunctionV2(async function () { return await deleteConditionalStyleById(googleInfo, element["2"]["1"]); });
+            if (err) {
+              notify("Error delete conditional style with id: " + element["2"]["1"]);
+              notify("styleId: " + update_ids[index]);
+              status("failed");
+              errIds.push(update_ids[index]);
+              continue loop1;
+            }
+          } catch (error) {
+            console.error("Error delete conditional style", error);
+            notify("Error delete conditional style");
+            notify("styleId: " + update_ids[index]);
+            status("failed");
+            errIds.push(update_ids[index]);
+            continue loop1;
+          }
+        }
+      }
+
+      //Tạo conditional style mới
+      for (let index = 0; index < dataStyleClone.more.length; index++) {
+        const newClone = dataStyleClone.more[index];
+        const response = await tryFunction(async function () { return await saveStyle(googleInfo, changeStyleID(clone(newClone), res["1"]["1"])); });
+        if (!response || !response["1"] || !response["1"]["1"]) {
+          notify("Error update style");
+          notify("styleId: " + update_ids[index]);
+          status("failed");
+          errIds.push(update_ids[index]);
+          continue loop1;
+        }
+        notifyResponse(response);
+      }
+    } catch (error) {
+      notify("Error update style");
+      notify(error);
+      notify("styleId: " + update_ids[index]);
+      status("failed");
+      errIds.push(update_ids[index]);
+      continue loop1;
+    }
+
+    //Nếu không có bất kì lỗi nào thì báo updated thành công
+    status("updated");
+    await sleep(TIME_SLEEP);
+  }
+}
+
+function notifyResponse(response) {
+  try {
+    console.info(response["1"]["1"] + " success!");
+  } catch (error) {
+    notify("error:" + JSON.stringify(response));
+  }
+}
+
+//Change style id gốc
+function changeStyleID(obj, styleId) {
+  obj["9"]["9"]["2"]["1"] = styleId
+  return obj;
+}
+
+function addZeroValue(obj) {
+  let newObj = clone(obj);
+
+  for (let index = 0; index < newObj.length; index++) {
+    const element = newObj[index];
+
+    if (element.hasOwnProperty("2")) {
+      for (let ind = 0; ind < element["2"].length; ind++) {
+        const elm = element["2"][ind];
+        if (elm.hasOwnProperty("2")) {
+          for (const key in elm["2"]) {
+            if (Object.hasOwnProperty.call(elm["2"], key)) {
+              const el = elm["2"][key];
+              if (isObject(el)) {
+                for (const k in el) {
+                  if (Object.hasOwnProperty.call(el, k)) {
+                    const e = el[k];
+                    if (isObject(e)) {
+                      if (!e.hasOwnProperty("1")) {
+                        newObj[index]["2"][ind]["2"][key][k]["1"] = "0";
+                      }
+                    } else {
+                      if (!el.hasOwnProperty("1")) {
+                        newObj[index]["2"][ind]["2"][key]["1"] = "0";
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return newObj;
+}
+
+async function tryUpdateToDB(e, r) { if (DEBUG) return; let t = MAX_RETRIES_UPDATE_DB; for (; t > 0;)try { let a = await updateToDB(e.adsenseId, r); return console.info("Update successful", r), a } catch (d) { console.error("Update failed. Retrying..."), --t > 0 && await sleep(TIME_SLEEP_UPDATE_DB) } console.error("Max retries exceeded. Update failed.", r) }
+
+async function updateToDB(pubId, opts = {}) {
+
+  let obj = {
+    "name": opts.name,
+    "pub_id": pubId,
+    "type": "search",
+    "status": "ok",
+    "style_id": Number(opts.styleId),
+  }
+
+  let headers = { "content-type": "application/json" };
+  headers[HNAME] = HVALUE;
+
+  var settings = {
+    "url": HLINK,
+    "method": "POST",
+    "timeout": 0,
+    "headers": headers,
+    "data": JSON.stringify(obj),
+  };
+
+  return await $.ajax(settings)
+}
+
+function handleResponse(response) {
+  try {
+    response = response.replace(")]}'\n", "").replace(")\n]\n}'\n\n", "");
+
+    response = JSON.parse(response);
+    return response;
+
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function getGoogleInfo() {
+  try {
+    let app_state = window.__asfe_app_state;
+
+    let appInfo = JSON.parse(app_state);
+
+    return { err: null, xsrfToken: appInfo["6"] };
+
+  } catch (error) {
+    return { err: "Error getGoogleInfo" };
+  }
+}
+
+async function tryFunction(fn, maxAttempts = MAX_RETRIES_GOOGLE) {
+  let attempts = 0;
+  while (attempts < maxAttempts) {
+    attempts++;
+    try {
+      const response = await fn(); // Gọi hàm cần thử
+      if (response && response["1"] && response["1"]["1"]) {
+        return response; // Nếu response là true, trả về kết quả
+      } else {
+        await sleep(TIME_SLEEP_UPDATE_GOOGLE);
+      }
+    } catch (error) {
+      console.error("Error:", error);
+
+      return false; // Trả về false nếu có lỗi xảy ra
+    }
+  }
+  return false; // Trả về false nếu không thành công sau số lần thử lại tối đa
+}
+
+async function tryFunctionV2(fn, maxAttempts = MAX_RETRIES_GOOGLE) {
+  let attempts = 0;
+  while (attempts < maxAttempts) {
+    attempts++;
+    try {
+      const response = await fn(); // Gọi hàm cần thử
+      if (response) {
+        //Lỗi -> thử lại
+        await sleep(TIME_SLEEP_UPDATE_GOOGLE);
+      } else {
+        //Không lỗi
+        return false
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      return true; // Trả về lỗi nếu có lỗi xảy ra
+    }
+  }
+  return true; // Trả về lỗi nếu không thành công sau số lần thử lại tối đa
+}
+
+async function getOldDataById(id = "", opts = {}) {
+  if (!id) {
+    console.error("id is required");
+    return "";
+  }
+  let obj = { "1": id };
+  var settings = {
+    "url": "/adsense/service/myads/GetSearchAdNodesSettings?pid=pub-" + opts.adsenseId + "&authuser=0&tpid=pub-" + opts.adsenseId + "&ov=3&hl=en_US&rpcTrackingId=%2Fadsense%2Fservice%2Fmyads%2FGetSearchAdNodesSettings%3Fpid%3Dpub-" + opts.adsenseId + "%26authuser%3D0%26tpid%3Dpub-" + opts.adsenseId + "%26ov%3D3%26hl%3Den_US%3A1",
+    "method": "POST",
+    "timeout": 0,
+    "headers": {
+      "activitylabels": "",
+      "accept": "application/json, text/plain, */*",
+      "activityname": "myAdsSearchInitializeStyleEditor",
+      "activitytrackingid": "myads",
+      "content-type": "application/json;charset=UTF-8",
+      "x-framework-xsrf-token": opts.xsrfToken
+    },
+    "data": JSON.stringify(obj),
+  };
+
+  let res;
+  try { await $.ajax(settings) } catch (error) { res = error.responseText; }
+  res = handleResponse(res);
+  return res;
+}
+
+async function saveStyle(opts = {}, cloneData, newData = {}) {
+  if (!cloneData || !newData) {
+    return;
+  }
+  let obj = clone(cloneData);
+
+  if (newData.id) {
+    //Update style
+    obj["1"] = newData.id;
+  } else {
+    //Tạo style mới
+    delete obj["1"];
+  }
+  if (newData.newName) {
+    obj["4"] = "ORIGINAL_ID:" + " " + ORIGINAL_ID + " - Clone - " + Date.now();
+  }
+
+  let payload = { "1": obj };
+
+  if (newData.shopping) {
+    payload["2"] = {
+      "2": "5630811681",
+      "4": "Shopping style",
+      "8": 2,
+      "9": {
+        "9": {
+          "2": {
+            "1": "",
+            "2": "",
+            "3": ""
+          },
+          "4": 2
+        }
+      },
+      "10": 1,
+      "12": {
+        "1": true
+      }
+    };
+  }
+  var settings = {
+    "url": "/adsense/service/myads/SaveSearchAdStyle?pid=pub-" + opts.adsenseId + "&authuser=0&tpid=pub-" + opts.adsenseId + "&ov=3&hl=en_US&rpcTrackingId=%2Fadsense%2Fservice%2Fmyads%2FSaveSearchAdStyle%3Fpid%3Dpub-" + opts.adsenseId + "%26authuser%3D0%26tpid%3Dpub-" + opts.adsenseId + "%26ov%3D3%26hl%3Den_US%3A1",
+    "method": "POST",
+    "timeout": 0,
+    "headers": {
+      "activitylabels": "",
+      "activityname": "myAdsSearchSaveAdStyle",
+      "activitytrackingid": "myads",
+      "content-type": "application/json;charset=UTF-8",
+      "x-framework-xsrf-token": opts.xsrfToken
+    },
+    "data": JSON.stringify(payload),
+  };
+
+  let res;
+  try { await $.ajax(settings) } catch (error) { res = error.responseText; }
+  res = handleResponse(res);
+
+  if (newData.newName) {
+    if (res["1"] && res["1"]["1"]) {
+      const update = await tryUpdateToDB(opts, { name: obj["4"], styleId: res["1"]["1"], generation: GENERATION });
+      if (!update || !update.status) {
+        notify("Error update to DB");
+      }
+    }
+  }
+  return res;
+}
+
+async function deleteConditionalStyleById(opts = {}, id) {
+  if (!id) {
+    return true;
+  }
+
+  let obj = { "1": id };
+
+  var settings = {
+    "url": "/adsense/service/myads/DeleteTargetedStyle?pid=pub-" + opts.adsenseId + "&authuser=0&tpid=pub-" + opts.adsenseId + "&ov=3&hl=en_US&rpcTrackingId=%2Fadsense%2Fservice%2Fmyads%2FDeleteTargetedStyle%3Fpid%3Dpub-" + opts.adsenseId + "%26authuser%3D0%26tpid%3Dpub-" + opts.adsenseId + "%26ov%3D3%26hl%3Den_US%3A2",
+    "method": "POST",
+    "timeout": 0,
+    "headers": {
+      "activitylabels": "",
+      "activityname": "myAdsSearchDeleteConditionalStyle",
+      "activitytrackingid": "myads",
+      "content-type": "application/json;charset=UTF-8",
+      "x-framework-xsrf-token": opts.xsrfToken
+    },
+    "data": JSON.stringify(obj),
+  };
+
+  let res;
+  try { await $.ajax(settings) } catch (error) { res = error.responseText; }
+  res = handleResponse(res);
+  if (isEmpty(res)) {
+    console.info(id + " deleted success!");
+    return false;
+  }
+
+  console.error("Error delete conditional style with response", res);
+
+  return true;
+}
+</script>

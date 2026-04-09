@@ -1,0 +1,37 @@
+#table-keywords {
+  thead {
+    position: relative;
+    /* Kích thước tương đối cho phần tử con */
+  }
+
+  /* Mũi tên sắp xếp */
+  .sorted-asc::after,
+  .sorted-desc::after {
+    content: '';
+    display: inline-block;
+    vertical-align: middle;
+    margin-left: 5px;
+    color: #bbb;
+    position: absolute;
+    /* Đặt vị trí tuyệt đối */
+    top: 50%;
+    /* Đặt vị trí theo chiều dọc ở giữa */
+    transform: translateY(-50%);
+    /* Dịch chuyển lên trên 50% chiều cao của ô tiêu đề */
+    font-size: 12px;
+  }
+
+  /* Mũi tên sắp xếp lên */
+  .sorted-asc::after {
+    content: '▲';
+  }
+
+  /* Mũi tên sắp xếp xuống */
+  .sorted-desc::after {
+    content: '▼';
+  }
+
+  .checkbox-col {
+    background-color: #d3eafd;
+  }
+}

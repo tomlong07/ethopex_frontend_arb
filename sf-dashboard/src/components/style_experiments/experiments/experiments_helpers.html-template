@@ -1,0 +1,299 @@
+<script>
+  window.arb_style.helpers = {
+    getAdsenseId: function () {
+      let t = window.location.href,
+        e = t.split('pub-')
+      if (2 != e.length) return
+      let n = e[1].split('/')
+      if (n.length >= 1) return n[0]
+    },
+
+    loadJquery: async () => {
+      if (typeof window.jQuery !== 'undefined') return
+
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = 'https://code.jquery.com/jquery-3.6.0.min.js'
+        script.onload = () => {
+          console.log('jQuery loaded.')
+          resolve()
+        }
+        script.onerror = () => {
+          reject(new Error('Failed to load jQuery.'))
+        }
+        document.head.appendChild(script)
+      })
+    },
+
+    handleResponse: (response) => {
+      try {
+        response = response.replace(")]}'\n", '').replace(")\n]\n}'\n\n", '')
+
+        response = JSON.parse(response)
+        return response
+      } catch (error) {
+        console.error(error)
+      }
+    },
+
+    isObject: (value) => {
+      return (
+        value !== null && typeof value === 'object' && !Array.isArray(value)
+      )
+    },
+
+    clone(item) {
+      return JSON.parse(JSON.stringify(item))
+    },
+
+    sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms))
+    },
+  }
+
+  window.arb_style.app = {}
+
+  window.arb_style.constants = {
+    TIME_SLEEP: 1e2,
+    TIME_SLEEP_UPDATE_DB: 2e3,
+    MAX_RETRIES_UPDATE_DB: 5,
+    TIME_SLEEP_GOOGLE: 5000,
+    MAX_RETRIES_GOOGLE: 3,
+  }
+
+  window.arb_style.process = {
+    total: 0,
+    pending: 0,
+    success: 0,
+    skip: 0,
+    error: 0,
+  }
+
+  try {
+    window.arb_style.process.total =
+      window.arb_style.dataConfig.updateIdsString.length
+
+    window.arb_style.process.pending =
+      window.arb_style.dataConfig.updateIdsString.length
+  } catch (error) {}
+
+  ;(function () {
+    const loggerId = 'floating-logger'
+    const oldElement = document.getElementById(loggerId)
+    if (oldElement) {
+      oldElement.remove()
+    }
+
+    const loggerWrapper = document.createElement('div')
+    loggerWrapper.id = loggerId
+    Object.assign(loggerWrapper.style, {
+      position: 'fixed',
+      left: '20px', // thêm dòng này
+      top: 'unset', // thêm dòng này
+      bottom: '20px',
+      right: 'unset',
+      width: '700px',
+      maxHeight: '65vh',
+      background: 'rgba(0, 0, 0, 0.85)',
+      color: '#fff',
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      borderRadius: '10px',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+      zIndex: 9999,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+    })
+
+    const header = document.createElement('div')
+    header.textContent = '📋 Logger ' + window.arb_style.dataConfig.version
+    Object.assign(header.style, {
+      background: '#1f1f1f',
+      padding: '8px 12px',
+      fontWeight: 'bold',
+      borderBottom: '1px solid #333',
+      borderTopLeftRadius: '10px',
+      borderTopRightRadius: '10px',
+    })
+
+    const statusBox = document.createElement('div')
+    statusBox.id = 'logger-status'
+    Object.assign(statusBox.style, {
+      padding: '10px',
+      fontWeight: 'bold',
+      textAlign: 'center',
+      fontSize: '14px',
+      backgroundColor: '#444',
+      color: '#fff',
+    })
+
+    const statsBox = document.createElement('div')
+    statsBox.id = 'logger-stats'
+    Object.assign(statsBox.style, {
+      padding: '6px 12px',
+      fontSize: '13px',
+      backgroundColor: '#222',
+      borderTop: '1px solid #333',
+      borderBottom: '1px solid #333',
+    })
+
+    const body = document.createElement('div')
+    body.id = 'logger-body'
+    Object.assign(body.style, {
+      padding: '10px',
+      overflowY: 'auto',
+      flex: '1',
+    })
+
+    const actionBox = document.createElement('div')
+    actionBox.id = 'logger-actions'
+    Object.assign(actionBox.style, {
+      padding: '8px 12px',
+      borderTop: '1px solid #333',
+      background: '#1f1f1f',
+      display: 'flex',
+      gap: '8px',
+      justifyContent: 'flex-end',
+    })
+
+    const startButton = document.createElement('button')
+    startButton.textContent = '▶️ Start'
+    Object.assign(startButton.style, {
+      padding: '4px 8px',
+      fontSize: '12px',
+      cursor: 'pointer',
+      borderRadius: '4px',
+      border: 'none',
+      background: '#007bff',
+      color: '#fff',
+    })
+    startButton.onclick = () => {
+      try {
+        window.arb_style.app.start()
+      } catch (error) {
+        window.arb_style.log(error)
+      }
+    }
+    actionBox.appendChild(startButton)
+
+    loggerWrapper.appendChild(header)
+    loggerWrapper.appendChild(statusBox)
+    loggerWrapper.appendChild(statsBox)
+    loggerWrapper.appendChild(body)
+    loggerWrapper.appendChild(actionBox)
+    document.body.appendChild(loggerWrapper)
+
+    // === Drag feature ===
+    let isDragging = false
+    let offsetX = 0
+    let offsetY = 0
+
+    header.style.cursor = 'move'
+
+    header.addEventListener('mousedown', (e) => {
+      isDragging = true
+      offsetX = e.clientX - loggerWrapper.getBoundingClientRect().left
+      offsetY = e.clientY - loggerWrapper.getBoundingClientRect().top
+    })
+
+    document.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        loggerWrapper.style.left = `${e.clientX - offsetX}px`
+        loggerWrapper.style.top = `${e.clientY - offsetY}px`
+        loggerWrapper.style.right = 'auto'
+        loggerWrapper.style.bottom = 'auto'
+      }
+    })
+
+    document.addEventListener('mouseup', () => {
+      isDragging = false
+    })
+
+    // ===== Logger log
+    window.arb_style.log = function (...msgs) {
+      msgs.forEach((msg) => {
+        if (window.arb_style.helpers.isObject(msg)) {
+          msg = JSON.stringify(msg, null, 2)
+        }
+        const logLine = document.createElement('div')
+        logLine.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`
+        logLine.style.marginBottom = '4px'
+        body.appendChild(logLine)
+      })
+      body.scrollTop = body.scrollHeight
+    }
+
+    // ===== Status
+    window.arb_style.status = function (text, type = 'info') {
+      statusBox.textContent = text
+      const colorMap = {
+        info: ['#444', '#fff'],
+        success: ['#28a745', '#fff'],
+        error: ['#dc3545', '#fff'],
+        warning: ['#ffc107', '#000'],
+        running: ['#17a2b8', '#fff'],
+      }
+      const [bg, color] = colorMap[type] || colorMap.info
+      statusBox.style.backgroundColor = bg
+      statusBox.style.color = color
+    }
+
+    // ===== Stats Counter
+    window.arb_style.success = function () {
+      window.arb_style.process.success++
+      window.arb_style.process.pending--
+      renderStats()
+    }
+
+    window.arb_style.error = function () {
+      window.arb_style.process.error++
+      window.arb_style.process.pending--
+      renderStats()
+    }
+
+    window.arb_style.skip = function () {
+      window.arb_style.process.skip++
+      window.arb_style.process.pending--
+      renderStats()
+    }
+
+    function renderStats() {
+      statsBox.innerHTML = `
+        🟡 Pending: ${window.arb_style.process.pending} &nbsp;&nbsp;
+        ✅ Success: ${window.arb_style.process.success} &nbsp;&nbsp;
+        ❌ Error: ${window.arb_style.process.error} &nbsp;&nbsp;
+        ⏭️ Skip: ${window.arb_style.process.skip} &nbsp;&nbsp;
+        🔹 Total: ${window.arb_style.process.total}
+      `
+    }
+
+    renderStats()
+  })()
+  ;(async function () {
+    window.arb_style.dataConfig.adsenseId =
+      window.arb_style.helpers.getAdsenseId()
+    if (
+      window.arb_style.dataConfig.adsenseId !=
+      window.arb_style.dataConfig.adsenseAccount
+    ) {
+      window.arb_style.status('Adsense ID', 'error')
+      window.arb_style.log(
+        'Adsense ID is not valid. Please check the configuration.'
+      )
+      return
+    }
+
+    await window.arb_style.helpers.loadJquery()
+
+    window.arb_style.status('Ready', 'info')
+    window.arb_style.log(
+      'Adsense ID: ' + window.arb_style.dataConfig.adsenseAccount
+    )
+    window.arb_style.log(
+      'Update IDs: ' + window.arb_style.dataConfig.updateIdsString
+    )
+  })()
+
+  console.info(window.arb_style)
+</script>

@@ -1,0 +1,111 @@
+name: Deploy Frontend ARB Strict
+on:
+  push:
+    branches:
+      # - main
+      - off-v1-notuse
+jobs:
+  build-and-deploy:
+    if: ${{ contains(github.event.head_commit.message, '--fe')}}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3.5.3
+
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          name: github_action
+          known_hosts: unnecessary
+
+      - name: Adding Known Hosts
+        run: ssh-keyscan -p ${{ secrets.SSH_PORT }} -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "22.13.1"
+          cache: "yarn"
+          cache-dependency-path: |
+            sf-dashboard/package-lock.json
+            sf-dashboard/yarn.lock
+
+      - name: Install yarn
+        run: |
+          cd sf-dashboard
+          npm install -g yarn
+
+      - name: Install project dependencies
+        if: steps.yarn-cache.outputs.cache-hit != 'true' # Over here!
+        run: |
+          cd sf-dashboard
+          yarn
+
+      - name: Build Vue
+        run: |
+          cd sf-dashboard
+          export NODE_OPTIONS=--max_old_space_size=8192
+          echo "VITE_END_POINT=${{ secrets.VITE_ENDPOINT_PRODUCTION }}" >> .env.production
+
+          if [[ "${{ github.event.head_commit.message }}" == *"--fast"* ]]; then
+            yarn fast --mode production
+          else
+            yarn build --mode production
+          fi
+
+      - name: Copy Project to Server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER_NAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: ./sf-dashboard/dist
+          target: /home/aff/go/PP-AFF/sf-dashboard/dist
+          strip_components: 3
+
+      - name: Run command on server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: aff
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            cd /home/aff/go/PP-AFF/sf-dashboard/dist
+            echo '{ "version": "${{ github.run_id }}" }' > version.json
+
+  notify-telegram:
+    needs: [build-and-deploy]
+    runs-on: ubuntu-latest
+    if: ${{ always() && needs.build-and-deploy.result != 'skipped' && !contains(github.event.head_commit.message, '--silent') }}
+    steps:
+      - name: Set environment label and icon
+        id: vars
+        run: |
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            echo "env_label=🟢🟢🟢 PRODUCTION" >> $GITHUB_OUTPUT
+          else
+            echo "env_label=🧑‍💻🧑‍💻🧑‍💻 DEV" >> $GITHUB_OUTPUT
+          fi
+
+          if [[ "${{ needs.build-and-deploy.result }}" == "success" ]]; then
+            echo "status_icon=✅✅✅" >> $GITHUB_OUTPUT
+          elif [[ "${{ needs.build-and-deploy.result }}" == "failure" ]]; then
+            echo "status_icon=❌❌❌" >> $GITHUB_OUTPUT
+          else
+            echo "status_icon=⚠️⚠️⚠️" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Send notification to Telegram Bot
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.CHATID_TELEGRAM_ARBDEV }}
+          token: ${{ secrets.BOTID_TELEGRAM_PUBPOWER }}
+          message: |
+            ${{ steps.vars.outputs.status_icon }} [${{ needs.build-and-deploy.result }}] — ${{ steps.vars.outputs.env_label }}
+            🔧 Workflow: ${{ github.workflow }}
+            📦 Repository: ${{ github.repository }}
+            👤 Triggered by: ${{ github.actor }}
+            📝 Commit: "${{ github.event.head_commit.message }}"
+            🔗 [🔍 View Run Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})

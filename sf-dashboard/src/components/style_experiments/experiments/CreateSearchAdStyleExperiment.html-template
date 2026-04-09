@@ -1,0 +1,77 @@
+<script>
+  ;(function () {
+    window.arb_style.app.CreateSearchAdStyleExperiment = async function (
+      newStyleId
+    ) {
+      if (!newStyleId) {
+        window.arb_style.log('Missing newStyleId')
+        return
+      }
+      const id = 'pub-' + window.arb_style.dataConfig.adsenseAccount
+
+      newStyleId = String(newStyleId)
+
+      let clonePayload = window.arb_style.helpers.clone(
+        window.arb_style.google.payloadCreate
+      )
+      const now = new Date()
+      const formattedDate = now.toISOString().slice(0, 10) // yyyy-mm-dd
+      clonePayload[
+        '1'
+      ] += `(Clone) - ID: ${newStyleId} ${formattedDate} - ${Date.now()}` //Tên
+
+      //1 là tên
+      //2 là số % thử nghiệm String(percent*2)
+      //3 là số ngày
+      //4 là id style gốc
+      //5 là templateId
+      clonePayload['4'] = newStyleId
+      var settings = {
+        url: `/adsense/service/myads/CreateSearchAdStyleExperiment?pid=${id}&authuser=0&tpid=${id}&ov=3&hl=en_US&rpcTrackingId=%2Fadsense%2Fservice%2Fmyads%2FCreateSearchAdStyleExperiment%3Fpid%3D${id}%26authuser%3D0%26tpid%3D${id}%26ov%3D3%26hl%3Den_US%3A1`,
+        method: 'POST',
+        timeout: 0,
+
+        headers: {
+          accept: 'application/json, text/plain, */*',
+          'accept-language': 'en-US,en;q=0.9',
+          activitylabels: '',
+          activityname: 'myAdsCreateSearchAdStyleExperiment',
+          activitytrackingid: 'myads',
+          'content-type': 'application/json;charset=UTF-8',
+          // origin: 'https://www.google.com',
+          priority: 'u=1, i',
+          // referer:
+          //   'https://www.google.com/adsense/new/u/0/pub-8153055892847290/myads/search/create-style-experiment/6177142670',
+          // 'sec-ch-ua':
+          //   '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+          // 'sec-ch-ua-mobile': '?0',
+          // 'sec-ch-ua-platform': '"macOS"',
+          // 'sec-fetch-dest': 'empty',
+          // 'sec-fetch-mode': 'cors',
+          // 'sec-fetch-site': 'same-origin',
+          // 'user-agent':
+          //   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+          // 'x-client-data':
+          //   'CKm1yQEIjrbJAQimtskBCKmdygEI2ovLAQiSocsBCJKjywEIhqDNAQj+pc4BCLzVzgEI+tfOAQi8584BCO/szgEIre3OARio6s4B',
+          'x-framework-xsrf-token': window.arb_style.google.xsrfToken,
+          // Cookie:
+          //   '_ga=GA1.1-2.1219588902.1745294716; _ga_MN6K9HLGVF=GS1.1-2.1745553693.14.1.1745553856.0.0.0; HSID=A6eCoXayQY3wdNFDp; SSID=AQz0nvCBwb4KMqU-J; APISID=EAD6-c3reLfbmTXi/AQqGeGvhnzE9QyJeP; SAPISID=bC9WnD5ksyMpg8Rf/AOFITlVvfQ4Mbq6Pv; __Secure-1PAPISID=bC9WnD5ksyMpg8Rf/AOFITlVvfQ4Mbq6Pv; __Secure-3PAPISID=bC9WnD5ksyMpg8Rf/AOFITlVvfQ4Mbq6Pv; OTZ=8049846_28_28__28_; SID=g.a000wAj68HmP71hvnUJEppNrSOhnX9LByvuUii7G15JJ719OHQwxt7x1aMF09K7--27JuiMvSQACgYKAZoSARYSFQHGX2MiVHv2qIPdlHHeRsGu0xahcBoVAUF8yKo2bqxX6323L8G9C6j0PGVn0076; __Secure-1PSID=g.a000wAj68HmP71hvnUJEppNrSOhnX9LByvuUii7G15JJ719OHQwxRdX2yWjkddeR0HAY01BTbgACgYKAXESARYSFQHGX2Mi7Rp4mnwfvPTvJSTBCHv2LBoVAUF8yKrvceQ-Xessx5csPVOa-Yiq0076; __Secure-3PSID=g.a000wAj68HmP71hvnUJEppNrSOhnX9LByvuUii7G15JJ719OHQwxk_2lfvjuU2p-cftzxTEOSQACgYKAWcSARYSFQHGX2MiQPqRptuQq7hUbKzu1Ub1nhoVAUF8yKrsXKu_OBd844COPpQAIYmF0076; AEC=AVcja2c42kBQYlx-T434qbSiH5rmoBHX2SWaOyrceDvscmlonGNCf_jDYHk; NID=523=cAJd8mSx7jPQqLsMIfA4QcTrqlvizsuElTCvq3gFYcx5DVf7HrF_3_lSJ3QO56XxfTVDQGhRFJbOe-5uxgeNelQyXCcJeCuhwdLp7oVhO427-e2y3ozfI0RqtqaHsOUYReeLqhHS8rZacZEbNkriLkvGSFzVBQN3U9d6x4vr6y5RVMF3O7iYEsBv8loEYAfvw9YVIUi_IGM6QANH5zlcHjgigMxhlNN-x4yIlpi8K6KycvP35KKyDT6a-WSr50dIyg_ila5jVfr11FjG0n4Le3-6R0byjbe3rUHkjWH7uyN2fFmJwenpu2E5OnVhNgQV2O2BgKjxIXUeHnDJneHMGqU; __Secure-1PSIDTS=sidts-CjIB7pHptdw6jiuIkFAAROPcPTU4RyM3m8gQakf6ca-zEDzcNV1Fr56nckRv91Ez_VKatRAA; __Secure-3PSIDTS=sidts-CjIB7pHptdw6jiuIkFAAROPcPTU4RyM3m8gQakf6ca-zEDzcNV1Fr56nckRv91Ez_VKatRAA; SIDCC=AKEyXzV0LTwFsYwccEvVImSkq_iK7PvAPvc6q4HA6liBLvcOIF39PsNeKROFr6f9ybsuCZyl0dA; __Secure-1PSIDCC=AKEyXzV5UwrI4TgTDcc9J6kgX8quxya9aom1dsri75rKUMSlPuJ4ZVW81yhVzqau9lC9KGUjEQ; __Secure-3PSIDCC=AKEyXzXycpDNN-jnp9N7dApFDDml-oIZJtEnuBt2R7AKCTmbKw-eEuFz1Pm01L5laUUpZXAxE2Y; NID=523=AjDDvyhmT_393rar8AmzrW72MVpcu0da-RBrcDxahOqnJ9OjIwtIRjdjoP-IxGh4-yrkP1trEmHdn_My-PnbqfMVMj3QhEu0N5fagM2tnqGNhHIFrS1Bv6WZn0NO_iIW5ZQuL_RyYlN1IU9IlUE0CmGvUJh9wN7NQoxF13xCfnsjO83c8c_YyOs9Nl917SpgdCVwubsbtwd5W4iezGTzcUUQ39RIxYrpNPQNH3MMhLCnlKas3Ol-fNwtAPQsWfITwpQ-hUh5E4Ja-Lma-tyseRPhyJu5v7IOBGPM7UadZT7YK9QDKhywyeq0RCrIi7WDJ_lk6hhRZGBAM2YQdEg5WME; SIDCC=AKEyXzVmdEQ86UUEUnPaz2mTsVtqiQeGwa6A7yie20d0FyfUFmJFhAtwos8Tb1c_K_LMheFimk8; __Secure-1PSIDCC=AKEyXzV0JpyLu9aBwcVcpKXrCmDBMQMztDwvBjnvl7-G8LJ4bRzGbO2zyjI5NRTdCbBISlNAYA; __Secure-3PSIDCC=AKEyXzUm5CklpKDcwt2gaEmnDVxmEjTodTIbCvtCC8buCmHU2K6EN1sWwhX8CTNd3rxgHBnVDFY',
+        },
+        data: JSON.stringify(clonePayload),
+      }
+
+      try {
+        await $.ajax(settings)
+      } catch (error) {
+        try {
+          return window.arb_style.helpers.handleResponse(error.responseText)
+        } catch (error2) {
+          window.arb_style.log('CreateSearchAdStyleExperiment Error', error2)
+          return
+        }
+      }
+
+      return ''
+    }
+  })()
+</script>

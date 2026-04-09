@@ -1,0 +1,47 @@
+.button-editor-image {
+  &:hover {
+    color: rgb(29 78 216);
+    background-color: unset;
+  }
+}
+
+.border-image-editor {
+  border: 4px solid rgba(59, 130, 246, 0);
+  opacity: 0.5;
+
+  &.selected-image,
+  &:hover {
+    border: 4px solid rgba(59, 130, 246, 1);
+    opacity: 1;
+  }
+}
+
+.edited-button {
+  background-color: #4a4950;
+  padding: 0 6px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #fff;
+}
+
+.list-image-editor::-webkit-scrollbar {
+  height: 7px;
+}
+
+/* Track */
+
+.list-image-editor::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+/* Handle */
+
+.list-image-editor::-webkit-scrollbar-thumb {
+  background: #adadad !important;
+}
+
+/* Handle on hover */
+
+.list-image-editor::-webkit-scrollbar-thumb:hover {
+  background: #888888 !important;
+}

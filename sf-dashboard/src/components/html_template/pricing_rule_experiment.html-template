@@ -1,0 +1,497 @@
+<script>
+  //PricingRuleExperiment
+  start();
+  function start(){
+
+    const dataConfig = {{{dataConfig}}};
+    let googleInfo = null;
+
+    console.log(dataConfig);
+
+    let notifyDiv = null, divDone = null, divCopy = null;
+    let statusJob = { created: 0, updated: 0, error: 0 };
+    let errIds = [];
+
+    function loadJQuery() { var e = document.createElement("script"); e.src = "https://code.jquery.com/jquery-3.6.0.min.js", e.onload = function () { console.info("jQuery loaded successfully!"), $(document).ready(function () { setTimeout(() => { init() }, 5e3) }) }, document.head.appendChild(e) }
+
+    function clearFixed() { let e = document.querySelectorAll(".fixed-div"); e.forEach(e => { e.remove() }) }
+    function addFixedDivDoneToBody() { (divDone = document.createElement("div")).classList.add("fixed-div", "fixed-div-done"), divDone.textContent = "PricingRuleExperiment:" + " v" + dataConfig.version, document.body.appendChild(divDone); var d = document.createElement("style"); d.textContent = ".fixed-div-done{position:fixed;top:200px;right:500px;width:200px;height:100px;background-color:#f0f0f0;border:1px solid #ccc;padding:10px;border-radius:5px;box-shadow:0 0 10px rgba(0,0,0,.2);z-index:9999;font-size:20px;color:green}", document.head.appendChild(d) } function addFixedDivToBody() { (notifyDiv = document.createElement("div")).classList.add("fixed-div", "fixed-div-notify"), notifyDiv.textContent = "Notify:", document.body.appendChild(notifyDiv); var d = document.createElement("style"); d.textContent = ".fixed-div-notify{position:fixed;top:200px;right:200px;width:200px;height:500px;overflow:scroll;background-color:#f0f0f0;border:1px solid #ccc;padding:10px;border-radius:5px;box-shadow:0 0 10px rgba(0,0,0,.2);z-index:9999; overflow:scroll}", document.head.appendChild(d) }
+    function addFixedDivCopyToBody() { (divCopy = document.createElement("div")).classList.add("fixed-div", "fixed-div-copy"), divCopy.textContent = "Job", document.body.appendChild(divCopy); var d = document.createElement("style"); d.textContent = ".fixed-div-copy{position:fixed;top: 400px;right: 500px;width:200px;height:100px;cursor:pointer;background-color:#f0f0f0;border:1px solid #ccc;padding:10px;border-radius:5px;box-shadow:0 0 10px rgba(0,0,0,.2);z-index:9999;font-size:20px;color:green;word-wrap: break-word}", document.head.appendChild(d) }
+    function notify(e) { console.info(e), notifyDiv.innerHTML += "<br>" + e }
+    function status(status = "") { if (!status) { return; }; statusJob[status]++, divCopy.innerHTML = JSON.stringify(statusJob) }
+    function done(e) { console.info(e), divDone.innerHTML += "<br>" + e }
+    async function sleep(e) { return new Promise(n => setTimeout(n, e)) } function dateNow() { var e, n = new Date, t = n.getDate(), r = n.getMonth() + 1; return n.getFullYear() + "-" + (r < 10 ? "0" : "") + r + "-" + (t < 10 ? "0" : "") + t }
+    function clone(input) { return JSON.parse(JSON.stringify(input)) };
+
+    clearFixed(), addFixedDivToBody(), addFixedDivDoneToBody(), addFixedDivCopyToBody(""), loadJQuery();
+
+    async function init(){
+      if (invalidNetwork()) {
+        return;
+      }
+
+      if (!dataConfig.date || dataConfig.date.length !== 2){
+        notify("Nhập sai date -> bỏ qua");
+        console.error(dataConfig.date);
+        return;
+      }
+
+      googleInfo = getGoogleInfo();
+      console.log(googleInfo)
+
+      if (!googleInfo.ok) {
+        done("Can't get google info");
+        return;
+      }
+
+      //await declineAnExp("5755156");
+      //return;
+
+
+      //get list exp đang có để loại ra không bị tạo trùng
+      let existsRuleExpId = await getExistsRuleExpIds();
+
+      console.log(existsRuleExpId);
+
+      //get list active rules xong loại bỏ exp đã tạo
+      const activeRules = await getAllActiveRuleData();
+
+      if (existsRuleExpId.length){
+        for (let i = activeRules.length - 1; i >= 0; i--) {
+          if (existsRuleExpId.includes(activeRules[i]["151"])){
+            activeRules.splice(i, 1);
+          }
+        }
+
+        notify(existsRuleExpId.length + " rule exp đã tạo trước đó -> bỏ qua");
+      }
+
+      if (!activeRules.length){
+        notify("Không tìm thấy rule active nào để tạo -> Kết thúc");
+        return;
+      }
+
+      notify(activeRules.length + " rule exp sẽ được tạo sau đây...");
+      
+      console.log("activeRules", activeRules);
+      for (let index = 0; index < activeRules.length; index++) {
+        const element = activeRules[index];
+        if (index > 1 && dataConfig.isDebug){
+          break;
+        }
+        let pl = makePayloadCreateExp(element);
+
+        if (!pl){
+          continue;
+        }
+
+        console.log(pl);
+
+        const resultCreate = await createAnExp(pl);
+
+        console.log(resultCreate);
+
+        if (resultCreate && resultCreate.result && resultCreate.result["2644"] && 
+          resultCreate.result["2644"].length && resultCreate.result["2644"][0]["3291"]){
+          notify("Tạo thành công rule exp: " + resultCreate.result["2644"][0]["3291"]);
+          status("created");
+        } else {
+          if (JSON.stringify(resultCreate).includes("NOT_UNIQUE")){
+            notify("Lỗi tạo rule exp: Field is not unique. Please choose a unique value.");
+          }else{
+            notify("Lỗi khi tạo rule exp");
+          }
+
+          status("error");
+          console.error(resultCreate);
+        }
+
+        await sleep(1000);
+      }
+
+      done("Done");
+    }
+
+    function invalidNetwork(){
+      if (window.location.pathname.replace("/", "") !== dataConfig.admanagerAccount){
+        done("Network ID is not correct " + dataConfig.admanagerAccount + " vs " + window.location.pathname.replace("/", ""));
+        return true;
+      }
+    }
+
+    async function getAllActiveRuleData(){
+      let response = await getListActiveRules();
+      let activeRules = [];
+
+      if (response && response.result && response.result["3440"] && response.result["3440"]["3400"]){
+          activeRules = response.result["3440"]["3400"];
+      }
+
+      return activeRules;
+    }
+
+    async function getExistsRuleExpIds(){
+      let exps = await getExps();
+      let existsRuleExpId = [];
+
+      try {
+        if (exps.result && exps.result["1102"] && exps.result["1102"]["2458"]){
+          for (let index = 0; index < exps.result["1102"]["2458"].length; index++) {
+            const element = exps.result["1102"]["2458"][index];
+            if (element && element["502"] && element["502"]["2163"] && element["502"]["2163"]["2097"]){
+              existsRuleExpId.push(element["502"]["2163"]["2097"]);
+            }
+          }  
+        }
+      } catch (error) {}
+
+      return existsRuleExpId;
+    }
+
+    async function getListActiveRules(){
+      var settings = {
+        "url": "https://admanager.google.com/dfp/v2/insights/rpc/PricingRuleService?methodName=getPricingRulesByStatement&networkCode="+googleInfo.networkId+"&authuser="+googleInfo.authuser+"&hl=en-US&f.sid="+googleInfo.sessionId+"&rpcTrackingId=PricingRuleService.getPricingRulesByStatement%3A2",
+        "method": "POST",
+        "timeout": 0,
+        "headers": {
+          "activityappid": "OPPORTUNITIES",
+          "activitylabels": "",
+          "activityname": "DrxAutoSuggestInput.PricingRule.Search",
+          "activitynewplaceurl": "optimization/experiments/create/type=unified_pricing_rule",
+          "activitypreviousplaceurl": "optimization/experiments/create/type=unified_pricing_rule",
+          "activitytype": "",
+          "content-type": "application/javascript; charset=UTF-8",
+          "x-client-date": googleInfo.timestamp,
+          "x-framework-xsrf-token": googleInfo.token,
+          "x-jspb-rpc-method": "getPricingRulesByStatement"
+        },
+        "data": "{\"method\":\"getPricingRulesByStatement\",\"params\":{\"2\":{\"1119\":\"30077200192266601205\"},\"358\":{\"1981\":\"WHERE (Status = 'ACTIVE' AND (Discount = false OR Discount IS NULL)) ORDER BY Name ASC LIMIT 1000 OFFSET 0\"}}}",
+      };
+
+      let res = await $.ajax(settings);
+
+      return res;
+    }
+
+    function getGoogleInfo(opts = {}) {
+      let res = {
+        ok: false,
+      }
+
+      try {
+        res = {
+          ok: true,
+          token: window.$acx.xsrfToken,
+          sessionId: window.sessionId,
+          networkId: dataConfig.admanagerAccount,
+        }
+
+        //if (window._initialData["EXCHANGE"]){
+          //res.timestamp = window._initialData["EXCHANGE"]["buildTimestamp"];
+        //}
+        
+        if (window._initialData["WORKSTREAM"]){
+          res.timestamp = window._initialData["WORKSTREAM"]["buildTimestamp"];
+        }
+
+        try {
+          res.authuser = window.GOOGLE_HELP_CHAT_ARGUMENTS[0].authuser;
+        } catch (error) {
+          console.error("Error getting google info", error);
+        }
+      } catch (error) {
+        console.error("Error getting google info", error);
+      }
+
+      if (!res.token || !res.sessionId || !res.timestamp || !res.networkId) {
+        console.error("Missing google info", res);
+        res.ok = false;
+      }
+
+      return res;
+    }
+
+    async function getExps(){
+      var settings = {
+        "url": "https://admanager.google.com/dfp/v2/insights/rpc/ExperimentService?methodName=getExperimentsByStatement&networkCode="+googleInfo.networkId+"&authuser="+googleInfo.authuser+"&hl=en-US&f.sid="+googleInfo.sessionId+"&rpcTrackingId=%2Fdfp%2Fv2%2Finsights%2Frpc%2FExperimentService%3FmethodName%3DgetExperimentsByStatement%26networkCode%3D"+googleInfo.networkId+"%26authuser%"+googleInfo.authuser+"D3%26hl%3Den-US%26f.sid%3D"+googleInfo.sessionId+"%3A1",
+        "method": "POST",
+        "timeout": 0,
+        "headers": {
+          "activityappid": "OPPORTUNITIES",
+          "activitylabels": "",
+          "activityname": "Initial Load",
+          "activitynewplaceurl": "optimization/experiments/list",
+          "activitypreviousplaceurl": "https://admanager.google.com/"+googleInfo.networkId+"#optimization/experiments/list",
+          "activitytype": "INITIAL_LOAD",
+          "content-type": "application/javascript; charset=UTF-8",
+          "x-client-date": googleInfo.timestamp,
+          "x-framework-xsrf-token": googleInfo.token,
+          "x-jspb-rpc-method": "getExperimentsByStatement"
+        },
+        "data": "{\"method\":\"getExperimentsByStatement\",\"params\":{\"2\":{\"1119\":\"21833983391513620851\"},\"1429\":{\"1981\":\"WHERE (Type IN('BACKFILL_V2', 'BLOCKING_RULE', 'DEAL_QUALITY_PRIVATE_AUCTION', 'EXCHANGE_RULE_PRICING_JEDI', 'OPTIMIZED_PROGRAMMATIC_COMPETITION', 'OPTIN_RULE', 'OUTSTREAM_VIDEO', 'PRESENTATION_ADD_STYLE', 'PRESENTATION_STYLE', 'PROTECTION_URL_BLOCK', 'SERVER_SIDE_FORMAT', 'TARGET_CPM', 'FUNDING_CHOICES_MESSAGE', 'MEDIATION_GROUP') AND Status IN('ACTIVE', 'PAUSED')) ORDER BY Type ASC LIMIT 1000 OFFSET 0\"}}}",
+      };
+
+      let res = await $.ajax(settings);
+
+      return res;
+    }
+
+    function dateConvert(dateString){
+      const dateParts = dateString.split("-");
+
+      const year = parseInt(dateParts[0], 10);
+      const month = parseInt(dateParts[1], 10);
+      const day = parseInt(dateParts[2], 10);
+
+      return {
+        year: year,
+        month: month,
+        day: day,
+      }
+    }
+
+    function makePayloadCreateExp(ruleData){
+      let id = ruleData["151"];
+      let name = ruleData["3844"];
+      if (!name){
+        notify("Rule thiếu thông tin -> bỏ qua");
+        console.error(ruleData);
+        return;
+      }
+
+      if (dataConfig.name){
+        name += " " + dataConfig.name;
+      }
+
+      name += " - " + Date.now();
+      const dateStart = dateConvert(dataConfig.date[0]);
+      const dateEnd = dateConvert(dataConfig.date[1]);
+      const trafficAllocation = ""+(dataConfig.trafficAllocation * 1000);
+      const trafficFull = ""+(100000 - dataConfig.trafficAllocation * 1000);
+
+      let autoPauseObject = {}; 
+      if (dataConfig.autoPause){
+        autoPauseObject["145"] = [];
+
+        for (let index = 0; index < dataConfig.autoPauseData.length; index++) {
+          const element = dataConfig.autoPauseData[index];
+          let temp =  {
+                        "1036": ""+(element.amount * 1000),
+                        "2024": 1164935543,
+                        "3912": 64661
+                      };
+          switch (element.type) {
+            case "cumulative":
+              temp["492"] = 1189403918;
+              break;
+            case "daily":
+              temp["492"] = 870701054;
+              break;
+          }
+          switch (element.metric) {
+            case "revenue":
+              temp["972"] = 1817825276;
+              break;
+            case "coverage":
+              temp["972"] = 430859752;
+              break;
+            case "cpm":
+              temp["972"] = 81359;
+              break;
+          }
+
+          autoPauseObject["145"].push(temp);
+        }
+      }
+
+      let oldCurrency;
+
+      if (ruleData && ruleData["3171"] && ruleData["3171"].length && ruleData["3171"][0] &&
+       ruleData["3171"][0]["1021"] && ruleData["3171"][0]["1021"]["2182"]){
+        oldCurrency = parseInt(ruleData["3171"][0]["1021"]["2182"]);
+      }
+
+      if (!oldCurrency){
+        notify("Không tìm thấy thông tin currency -> bỏ qua");
+        return;
+      }
+
+      oldCurrency = parseInt(oldCurrency);
+
+      let newCurrency;
+
+      if (dataConfig.experimentAction == "increase"){
+        if (dataConfig.experimentType == "currency"){
+          newCurrency = oldCurrency + dataConfig.experimentAmount * 1e6;
+        }
+
+        if (dataConfig.experimentType == "percent"){
+          newCurrency = oldCurrency * (100 + dataConfig.experimentAmount)/100;
+        }
+      }
+
+      if (dataConfig.experimentAction == "decrease"){
+        if (dataConfig.experimentType == "currency"){
+          newCurrency = oldCurrency - dataConfig.experimentAmount * 1e6;
+        }
+        if (dataConfig.experimentType == "percent"){
+          newCurrency = oldCurrency * (100 - dataConfig.experimentAmount)/100;
+        }
+      }
+
+      //Tiền bé nhất là 0.01$
+      //if (newCurrency < 10000){
+      //  notify("Currency mới quá bé -> bỏ qua");
+      //  console.error(newCurrency + " quá bé", ruleData);
+      //  return;
+      //}
+      newCurrency = roundToFourthPlace(newCurrency); //làm tròn để ko chỉ dùng số thập phân đến số thứ 2
+      newCurrency = ""+newCurrency;
+
+      let idUnique;
+      let idUnique2;
+
+      if (ruleData["3171"] && ruleData["3171"].length && ruleData["3171"][0]["1555"] && ruleData["3171"][0]["903"]){
+        idUnique = ruleData["3171"][0]["1555"];
+        idUnique2 = ruleData["3171"][0]["903"];
+      }
+
+      if (!idUnique || !idUnique2){
+        notify("Không tìm thấy idUnique -> bỏ qua");
+        console.error(ruleData);
+        return;
+      }
+
+      let payload = {
+        "method": "createPublisherInitiatedExperiments",
+        "params": {
+            "2": {
+                "1119": "41049711403114264158"
+            },
+            "3437": [
+                {
+                    "1942": ruleData["1025"],
+                    "2163": {
+                        "2097": id,
+                        "2377": [
+                            {
+                                "727": trafficFull,
+                                "1135": true,
+                                "1294": {}
+                            },
+                            {
+                                "727": trafficAllocation,
+                                "1135": false,
+                                "1294": {
+                                    "3629": idUnique,
+                                    "3859": {
+                                        "30": {
+                                            "385": "USD",
+                                            "2182": newCurrency
+                                        },
+                                        "2978": idUnique2
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    "2198": autoPauseObject,
+                    "2828": [
+                        {
+                            "397": {
+                                "2802": 0,
+                                "2958": 0,
+                                "3371": {
+                                    "301": dateEnd.day,
+                                    "398": dateEnd.year,
+                                    "2319": dateEnd.month
+                                },
+                                "4030": 0
+                            },
+                            "3028": {
+                                "2802": 0,
+                                "2958": 0,
+                                "3371": {
+                                    "301": dateStart.day,
+                                    "398": dateStart.year,
+                                    "2319": dateStart.month
+                                },
+                                "4030": 0
+                            }
+                        }
+                    ],
+                    "3291": name,
+                    "3315": 135467712
+                }
+            ]
+          }
+        }
+      return payload;
+    }
+
+    function roundToFourthPlace(numberStr) {
+      // Chuyển đổi chuỗi số thành kiểu số (number)
+      const number = parseInt(numberStr, 10);
+      
+      // Làm tròn số đến số thứ tư (hàng nghìn)
+      const rounded = Math.round(number / 10000) * 10000;
+      
+      // Chuyển đổi số đã làm tròn thành chuỗi
+      return rounded.toString();
+    }
+
+
+
+    async function createAnExp(payload){
+      var settings = {
+        "url": "https://admanager.google.com/dfp/v2/insights/rpc/ExperimentService?methodName=createPublisherInitiatedExperiments&networkCode="+googleInfo.networkId+"&authuser="+googleInfo.authuser+"&hl=en-US&f.sid="+googleInfo.sessionId+"&rpcTrackingId=%2Fdfp%2Fv2%2Finsights%2Frpc%2FExperimentService%3FmethodName%3DcreatePublisherInitiatedExperiments%26networkCode%3D"+googleInfo.networkId+"%26authuser%3D"+googleInfo.authuser+"%26hl%3Den-US%26f.sid%3D"+googleInfo.sessionId+"%3A1",
+        "method": "POST",
+        "timeout": 0,
+        "headers": {
+          "activityappid": "OPPORTUNITIES",
+          "activitylabels": "",
+          "activityname": "PieForm.EXCHANGE_RULE_PRICING_JEDI.StepForwardTrigger",
+          "activitynewplaceurl": "optimization/experiments/create/type=unified_pricing_rule",
+          "activitypreviousplaceurl": "optimization/experiments/create/type=unified_pricing_rule",
+          "activitytype": "",
+          "content-type": "application/javascript; charset=UTF-8",
+          "x-client-date": googleInfo.timestamp,
+          "x-framework-xsrf-token": googleInfo.token,
+          "x-jspb-rpc-method": "createPublisherInitiatedExperiments"
+        },
+        "data": JSON.stringify(payload),
+      };
+
+      let res = await $.ajax(settings);
+
+      return res;
+    }
+
+    //Xóa là mất hẳn luôn trên google
+    async function declineAnExp(id){
+      var settings = {
+        "url": "https://admanager.google.com/dfp/v2/insights/rpc/ExperimentService?methodName=performExperimentAction&networkCode="+googleInfo.networkId+"&authuser="+googleInfo.authuser+"&hl=en-US&f.sid="+googleInfo.sessionId+"&rpcTrackingId=%2Fdfp%2Fv2%2Finsights%2Frpc%2FExperimentService%3FmethodName%3DperformExperimentAction%26networkCode%3D"+googleInfo.networkId+"%26authuser%"+googleInfo.authuser+"D3%26hl%3Den-US%26f.sid%3D"+googleInfo.sessionId+"%3A1",
+        "method": "POST",
+        "timeout": 0,
+        "headers": {
+          "activityappid": "OPPORTUNITIES",
+          "activitylabels": "",
+          "activityname": "StopAndDeclineExperiment",
+          "activitynewplaceurl": "optimization/experiments/list",
+          "activitypreviousplaceurl": "optimization/experiments/list",
+          "activitytype": "",
+          "content-type": "application/javascript; charset=UTF-8",
+          "x-client-date": "1715071075",
+          "x-framework-xsrf-token": "hy7Q2KkQg7LxOlvu6UnUS403q_s:1715143081116",
+          "x-jspb-rpc-method": "performExperimentAction"
+        },
+        "data": "{\"method\":\"performExperimentAction\",\"params\":{\"2\":{\"1119\":\"4791044642900846503\"},\"977\":{\"1981\":\"WHERE Id = "+id+" ORDER BY Id ASC LIMIT 1 OFFSET 0\"},\"1758\":{\"435\":{\"3967\":\"\"}}}}",
+      };
+
+      $.ajax(settings).done(function (response) {
+        console.log(response);
+      });
+    }
+  }
+ 
+</script>

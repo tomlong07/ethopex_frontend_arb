@@ -1,0 +1,72 @@
+.header {
+  background: #25282f;
+}
+
+.Favicon-7 {
+  background-position: center;
+  background-repeat: no-repeat;
+  width: 38px;
+  background-size: 38px;
+}
+
+.esc-button {
+  color: rgb(71 85 105);
+  background-color: aliceblue;
+  font-size: 10px;
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.375rem;
+
+  &:hover {
+    background-color: rgb(224, 231, 255);
+  }
+}
+
+.search-modal-pop.n-dialog.n-modal {
+  width: 60vw;
+  height: 80vh;
+
+  .n-dialog__content {
+    max-height: 100%;
+    overflow: hidden;
+  }
+}
+
+.router-link-search {
+  border-bottom: 1px solid #f1f5f9;
+
+  &.enter-now-router {
+    background-color: rgb(224, 231, 255);
+  }
+
+  a {
+    width: 100%;
+    display: block;
+  }
+}
+
+.quick-search-text-k {
+  font-size: 11px;
+  line-height: 21px;
+  color: rgb(100 116 139);
+}
+
+.logo-wrapper {
+  &:hover {
+    color: #cbd5e1;
+  }
+}
+
+.language-logo-text {
+  right: -18px;
+}
+
+.max-w-80px {
+  max-width: 80px;
+}
+
+.divider-header {
+  border-right: 1px solid #dadce0;
+  box-sizing: border-box;
+  width: 5px;
+  height: 22px;
+}

@@ -1,0 +1,18 @@
+<script>
+  ;(function () {
+    window.arb_style.google = {
+      isStop: () => {
+        return !window.arb_style.google.xsrfToken
+      },
+    }
+    window.arb_style.app.getGoogleInfo = () => {
+      try {
+        const app_state = window.__asfe_app_state
+
+        const appInfo = JSON.parse(app_state)
+
+        window.arb_style.google.xsrfToken = appInfo['6']
+      } catch (error) {}
+    }
+  })()
+</script>

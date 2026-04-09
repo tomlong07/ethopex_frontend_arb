@@ -1,0 +1,70 @@
+.n-input .n-input__suffix > .n-icon:hover,
+.n-input .n-input__prefix > .n-icon:hover {
+  color: black;
+}
+
+.carousel-img {
+  width: 100%;
+  height: 240px;
+  object-fit: cover;
+}
+
+.n-upload {
+  width: unset;
+}
+
+.n-upload-dragger {
+  padding: 16px;
+}
+
+.remove_icon {
+  cursor: pointer !important;
+}
+
+.default-image {
+  max-height: 100px !important;
+}
+
+// .n-card__content {
+//   padding: 0.5rem !important;
+// }
+
+.gallary-media {
+  .media-cre img,
+  video {
+    height: 100px;
+    object-fit: cover !important;
+  }
+}
+
+.icon-wrapper {
+  width: 80px !important;
+  height: 80px !important;
+  background: #ffffff;
+  border: 1px dashed #e0e0e6;
+}
+
+.icon-wrapper:hover {
+  border: 1px dashed #18a058;
+}
+
+.selected img {
+  border: 2px solid transparent;
+  outline: 2px solid #f43f5e;
+  outline-offset: -2px;
+}
+
+.mt-3px {
+  margin-top: 3px;
+}
+
+.custom-popover .n-popover-content {
+  background-color: black;
+  color: white;
+}
+
+.media-item-element {
+  img {
+    max-height: 150px;
+  }
+}

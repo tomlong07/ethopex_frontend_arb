@@ -1,0 +1,135 @@
+name: Check Commit
+
+on:
+  push:
+    branches:
+      - "**"
+
+jobs:
+  type-check:
+    if: contains(github.event.head_commit.message, '--test')
+    runs-on: ubuntu-latest
+
+    outputs:
+      status: ${{ steps.run_check.outputs.status }}
+      errors: ${{ steps.parse_log.outputs.errors }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.1"
+          cache: yarn
+          cache-dependency-path: sf-dashboard/yarn.lock
+
+      - name: Cache node_modules
+        id: cache-modules
+        uses: actions/cache@v4
+        with:
+          path: sf-dashboard/node_modules
+          key: node-modules-${{ runner.os }}-${{ hashFiles('sf-dashboard/yarn.lock') }}
+          restore-keys: |
+            node-modules-${{ runner.os }}-
+
+      - name: Install yarn
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        run: npm install -g yarn
+
+      - name: Install dependencies
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        working-directory: sf-dashboard
+        run: yarn install --frozen-lockfile
+
+      - name: Run type check
+        id: run_check
+        working-directory: sf-dashboard
+        continue-on-error: true
+        run: |
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          yarn run ok > yarn_output.log 2>&1
+          echo "status=$?" >> $GITHUB_OUTPUT
+
+      - name: Parse error logs
+        id: parse_log
+        run: |
+          ERRORS=$(grep -E "error TS[0-9]+:" sf-dashboard/yarn_output.log | sort | uniq | head -n 20)
+          echo "errors<<EOF" >> $GITHUB_OUTPUT
+          echo "$ERRORS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  collect-info:
+    if: contains(github.event.head_commit.message, '--test')
+    runs-on: ubuntu-latest
+
+    outputs:
+      commit_msg: ${{ steps.commit.outputs.message }}
+      branch_name: ${{ steps.info.outputs.branch }}
+      author_email: ${{ steps.info.outputs.email }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get commit message
+        id: commit
+        run: |
+          echo "message=$(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
+
+      - name: Get branch and author
+        id: info
+        run: |
+          echo "branch=$(git rev-parse --abbrev-ref HEAD)" >> $GITHUB_OUTPUT
+          echo "email=$(git log -1 --pretty=format:'%ae')" >> $GITHUB_OUTPUT
+
+  send-message:
+    needs: [type-check, collect-info]
+    runs-on: ubuntu-latest
+    if: ${{ needs.collect-info.outputs.commit_msg != '' }}
+    
+    steps:
+      - name: Send Discord Message
+        run: |
+          COMMIT_MSG="${{ needs.collect-info.outputs.commit_msg }}"
+          BRANCH_NAME="${{ needs.collect-info.outputs.branch_name }}"
+          AUTHOR_EMAIL="${{ needs.collect-info.outputs.author_email }}"
+          STATUS="${{ needs.type-check.outputs.status }}"
+          RAW_ERRORS="${{ needs.type-check.outputs.errors }}"
+
+          if [ "$STATUS" -eq 0 ]; then
+            TITLE="✅ Build Passed"
+            COLOR=3066993
+            DESCRIPTION="Code đã được kiểm tra thành công."
+          else
+            TITLE="❌ Build Failed"
+            COLOR=15158332
+            DESCRIPTION="Build lỗi. Vui lòng kiểm tra chi tiết bên dưới."
+          fi
+
+          ERRORS_FIELDS="[]"
+          while IFS= read -r line; do
+            CLEANED_LINE=$(echo "$line" | sed 's/"/\\"/g')
+            ERRORS_FIELDS=$(echo "$ERRORS_FIELDS" | jq --arg error "$CLEANED_LINE" '. += [{"name":"Error","value":$error}]')
+          done <<< "$RAW_ERRORS"
+
+          STATIC_FIELDS=$(jq -n \
+            --arg branch "$BRANCH_NAME" \
+            --arg email "$AUTHOR_EMAIL" \
+            --arg commit "$COMMIT_MSG" \
+            '[{"name":"Branch","value":$branch,"inline":true},
+              {"name":"Author","value":$email,"inline":true},
+              {"name":"Commit Message","value":$commit}]')
+
+          FINAL_FIELDS=$(jq -n --argjson a "$STATIC_FIELDS" --argjson b "$ERRORS_FIELDS" '$a + $b')
+
+          jq -n \
+            --arg title "$TITLE" \
+            --arg description "$DESCRIPTION" \
+            --argjson color "$COLOR" \
+            --argjson fields "$FINAL_FIELDS" \
+            '{embeds:[{title:$title,description:$description,color:$color,fields:$fields}]}' \
+            > discord_payload.json
+
+          curl -s -X POST "https://discord.com/api/webhooks/1376416327589167176/ErP4U2sSASg7Qt0vEGVSVOO2zjKFPCvhCX3Z_e17o-DjBVRZ6FaT7WBRcMsQ-fnpaSIS" \
+            -H "Content-Type: application/json" \
+            -d @discord_payload.json

@@ -1,0 +1,101 @@
+.btt-days:hover {
+  color: #000000;
+}
+
+.datepicker-menu-custom {
+  .selected {
+    background: #ddd;
+  }
+
+  .dp__action_buttons {
+    width: 80%;
+  }
+
+  .dp__selection_preview {
+    width: 20%;
+    min-width: 150px;
+  }
+
+  .dp__action_button {
+    min-width: 52px;
+    justify-content: center;
+  }
+}
+
+.dp__menu {
+  &_content_wrapper {
+    border-width: 1px;
+  }
+
+  .dp__calendar_header_item {
+    font-weight: 500 !important;
+  }
+
+  .dp__preset_ranges {
+    width: 150px;
+    color: #f43f5e;
+  }
+
+  .dp__action.dp__select {
+    border-width: 1px;
+    background: #5e6890;
+    color: white;
+    font-weight: 500;
+    padding: 5px 10px;
+  }
+
+  .dp__action.dp__cancel {
+    border-width: 1px;
+    margin-right: 10px;
+    color: #000000;
+    font-weight: 500;
+    padding: 5px 10px;
+  }
+}
+
+.dp__input_wrap {
+  .dp__input_icon_pad {
+    padding-left: 15px;
+  }
+
+  .dp__input_icon {
+    left: unset;
+    right: 0;
+    border-left: 1px solid #bdbac2;
+  }
+}
+
+.small-datepicker .dp__input {
+  padding: 4px 8px;
+  /* Giảm padding bên trong */
+  height: 28px;
+  /* Thiết lập chiều cao nhỏ hơn */
+  font-size: 12px;
+  /* Giảm kích thước chữ */
+}
+
+.small-datepicker {
+  width: 220px !important;
+
+  @media (min-width: 480px) {
+    width: 219px !important;
+  }
+
+  .dp__preset_ranges {
+    font-size: 12px !important;
+    font-weight: 500 !important;
+  }
+
+  .dp__selection_preview {
+    font-weight: 500 !important;
+  }
+}
+.dp__clear_icon
+{
+    position: absolute;
+    top: 50%;
+    inset-inline-end: 0;
+    transform: translateY(-50%) translateX(-90%);
+    cursor: pointer;
+    color: var(--dp-icon-color);
+}

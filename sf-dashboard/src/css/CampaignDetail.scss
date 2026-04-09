@@ -1,0 +1,78 @@
+.n-base-select-option__content {
+  width: 100%;
+}
+
+.custom-disabled-input {
+  background-color: #fafafc;
+  /* Màu xám nhạt */
+}
+
+.off-all2 {
+  a:not(.always-on),
+  .n-button:not(.always-on),
+  .n-icon,
+  .datepicker-menu-custom {
+    pointer-events: none;
+  }
+}
+
+.off-all {
+  .n-input,
+  .n-switch,
+  .n-base-close {
+    background-color: #fafafc;
+    // cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  .n-checkbox,
+  .n-select {
+    pointer-events: none;
+  }
+
+  .n-tabs {
+    .n-card__content > button {
+      background-color: #fafafc;
+
+      pointer-events: none;
+    }
+
+    .n-tabs-tab--addable {
+      pointer-events: none;
+    }
+  }
+
+  .n-switch {
+    opacity: 0.5;
+  }
+
+  .n-select {
+    .n-base-selection-label,
+    .n-base-selection-tags {
+      background-color: #fafafc;
+    }
+  }
+
+  .pointer-events-auto {
+    .n-select {
+      pointer-events: auto;
+      .n-base-selection-label,
+      .n-base-selection-tags {
+        background-color: white;
+      }
+    }
+  }
+}
+
+@keyframes highlight {
+  0% {
+    background-color: #ffffcc;
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.highlight-flash {
+  animation: highlight 2s ease-out;
+}

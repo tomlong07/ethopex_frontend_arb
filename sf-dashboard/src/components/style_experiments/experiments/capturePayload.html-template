@@ -1,0 +1,63 @@
+<script>
+  // const LINK = `service/PerformanceStats`
+  const LINK = `service/myads/CreateSearchAdStyleExperiment`
+  ;(function () {
+    const originalOpen = XMLHttpRequest.prototype.open
+    const originalSend = XMLHttpRequest.prototype.send
+
+    XMLHttpRequest.prototype.open = function (
+      method,
+      url,
+      async,
+      user,
+      password
+    ) {
+      this._requestMethod = method
+      this._requestUrl = url
+      return originalOpen.apply(this, arguments)
+    }
+
+    XMLHttpRequest.prototype.send = function (body) {
+      // console.log('[XHR Intercepted]', {
+      //   method: this._requestMethod,
+      //   url: this._requestUrl,
+      //   payload: body,
+      // })
+
+      if (this._requestUrl.includes(LINK)) {
+        if (!window.arb_style.google.payloadCreate) {
+          window.arb_style.google.payloadCreate = JSON.parse(body)
+          window.arb_style.log('Get Payload Success')
+          console.log(body)
+        }
+      }
+
+      return originalSend.apply(this, arguments)
+    }
+  })()
+  ;(function () {
+    const originalFetch = window.fetch
+
+    window.fetch = function (input, init) {
+      const method = (init && init.method) || 'GET'
+      const payload = (init && init.body) || null
+      const url = typeof input === 'string' ? input : input.url
+
+      // console.log('[Fetch Intercepted]', {
+      //   method,
+      //   url,
+      //   payload,
+      // })
+
+      if (url.includes(LINK)) {
+        if (!window.arb_style.google.payloadCreate) {
+          window.arb_style.google.payloadCreate = JSON.parse(payload)
+          window.arb_style.log('Get Payload Success')
+          console.info(payload)
+        }
+      }
+
+      return originalFetch.apply(this, arguments)
+    }
+  })()
+</script>

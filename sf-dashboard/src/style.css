@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-gray: #dee2e6;
+}
+/* Dark mode variables */
+.dark {
+  --bg-primary: #232325;
+  --bg-secondary: #181818;
+  --text-primary: #f9fafba4;
+  
+  --text-secondary: #d1d5db;
+  --border-color: #33353B;
+  /* --border-color: #374151; */
+  --color-gray: #4b5563;
+  --color-white: #9ca3af;
+  --color-switch: #70a4ffc9;
+  --color-popover: #455365;
+  --bg-maximize: #1e1e1e;
+  --bg-maximize-green: #182c17;
+  --bg-maximize-red: #3a1916 ;
+  --bg-maximize-color-green: #ceddc8;
+  --bg-maximize-color-red: #d6c4ba;
+  --bg-maximize-border: #38393a;
+}
+/*
+old color: 
+--text-primary: #f9fafb; 
+--bg-maximize-green: #093E05;
+--color-switch: #70a4ff;
+--bg-maximize-red: #451611 ;
+*/
+
+@layer utilities {
+  .scroll-thin-custom, .ag-body-vertical-scroll-viewport {
+    scrollbar-width: thin;
+    /* Firefox */
+  }
+
+  .scroll-thin-custom::-webkit-scrollbar, .ag-body-vertical-scroll-viewport::-webkit-scrollbar {
+    width: 4px;
+    /* độ rộng thanh cuộn dọc */
+    height: 4px;
+    /* độ rộng thanh cuộn ngang */
+  }
+
+  .scroll-thin-custom::-webkit-scrollbar-thumb, .ag-body-vertical-scroll-viewport::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+  }
+
+  .scroll-thin-custom::-webkit-scrollbar-track, .ag-body-vertical-scroll-viewport::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

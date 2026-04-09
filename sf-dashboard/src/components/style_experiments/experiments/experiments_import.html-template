@@ -1,0 +1,11 @@
+<script>
+  //Import from vuejs]
+  window.arb_style = {
+    dataConfig: {},
+  }
+  window.arb_style.dataConfig.version = '{{{version}}}';
+  window.arb_style.dataConfig.adsenseAccount = '{{{adsenseAccount}}}';
+  window.arb_style.dataConfig.updateIdsString = {{{updateIdsString}}};
+
+  console.info('VERSION: ' + window.arb_style.dataConfig.version);
+</script>

@@ -1,0 +1,36 @@
+.special {
+  width: 150px !important;
+
+  .n-base-selection__border {
+    border-top-width: 0px;
+    border-left-width: 0px;
+    border-right-width: 0px;
+    border-bottom-width: 0px;
+  }
+
+  .n-base-selection__state-border {
+    border-top-width: 0px;
+    border-left-width: 0px;
+    border-right-width: 0px;
+    border-bottom-width: 0px;
+  }
+
+  .n-input__border {
+    border-top-width: 0px;
+    border-left-width: 0px;
+    border-right-width: 0px;
+    border-bottom-width: 0px;
+  }
+
+  .n-input__state-border {
+    border-top-width: 0px;
+    border-left-width: 0px;
+    border-right-width: 0px;
+    border-bottom-width: 0px;
+  }
+
+  .dp__input {
+    max-height: 28px !important;
+    border: none !important;
+  }
+}

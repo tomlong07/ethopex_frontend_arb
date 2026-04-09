@@ -1,0 +1,10 @@
+// Local storage keys
+export const LOCAL_STORAGE_TOKEN = 'uif'
+export const EMAIL_STORAGE = 'email_storage'
+export const CHART_REPORT_STORAGE = 'chart_metrics'
+export const OFF_SERIES_CHART = 'off_series'
+export const LOCAL_BACK_URL = 'b_url'
+export const PUB_INFO = 'pub_info'
+export const DATA_CHARTS_PROFILE = 'DataProfileChart'
+export const CHART_STORAGE_KEY = 'charts_data'
+export const ID_STORAGE_PROFILE = 'id_profile'

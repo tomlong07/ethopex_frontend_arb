@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campaign Report Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .expand-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .expand-content.active {
+            max-height: 500px;
+        }
+        .rotate-90 {
+            transform: rotate(90deg);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto p-6">
+        <h1 class="text-2xl font-bold mb-6 text-gray-800">Campaign Report Demo</h1>
+        
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-sm border">
+            <div class="grid grid-cols-7 gap-4 p-4 bg-gray-100 font-semibold text-gray-700 border-b">
+                <div>Campaign</div>
+                <div>Actions</div>
+                <div>Status</div>
+                <div>Days Active</div>
+                <div>Impressions</div>
+                <div>Clicks</div>
+                <div>CTR</div>
+            </div>
+            
+            <!-- Campaign Row 1 -->
+            <div class="campaign-row">
+                <div class="grid grid-cols-7 gap-4 p-4 border-b hover:bg-gray-50 items-center">
+                    <div class="text-blue-600 font-medium">Facebook - Google Top Sleeping Pills Campaign</div>
+                    <div class="flex space-x-2">
+                        <button onclick="toggleDateData(1)" class="action-btn bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm flex items-center" title="Xem dữ liệu 7 ngày qua">
+                            <span class="mr-1">📅</span>
+                            <span class="arrow transition-transform" id="date-arrow-1">▼</span>
+                        </button>
+                        <button onclick="toggleAdGroupData(1)" class="action-btn bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm flex items-center" title="Xem theo Ad Group">
+                            <span class="mr-1">📊</span>
+                            <span class="arrow transition-transform" id="group-arrow-1">▼</span>
+                        </button>
+                    </div>
+                    <div><span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm whitespace-nowrap">PENDING</span></div>
+                    <div>9</div>
+                    <div>213</div>
+                    <div>32</div>
+                    <div>15.0%</div>
+                </div>
+                
+                <!-- Date Data Dropdown -->
+                <div id="date-data-1" class="expand-content bg-blue-50 border-l-4 border-blue-500">
+                    <div class="p-4">
+                        <h4 class="font-semibold text-blue-800 mb-3">📅 Dữ liệu 7 ngày qua</h4>
+                        <div class="grid grid-cols-5 gap-4 text-sm">
+                            <div class="font-medium">Ngày</div>
+                            <div class="font-medium">Impressions</div>
+                            <div class="font-medium">Clicks</div>
+                            <div class="font-medium">CTR</div>
+                            <div class="font-medium">Cost</div>
+                        </div>
+                        <div class="space-y-2 mt-2">
+                            <div class="grid grid-cols-5 gap-4 text-sm py-1">
+                                <div>2024-01-15</div>
+                                <div>45</div>
+                                <div>8</div>
+                                <div>17.8%</div>
+                                <div>$25</div>
+                            </div>
+                            <div class="grid grid-cols-5 gap-4 text-sm py-1">
+                                <div>2024-01-14</div>
+                                <div>38</div>
+                                <div>6</div>
+                                <div>15.8%</div>
+                                <div>$18</div>
+                            </div>
+                            <div class="grid grid-cols-5 gap-4 text-sm py-1">
+                                <div>2024-01-13</div>
+                                <div>52</div>
+                                <div>9</div>
+                                <div>17.3%</div>
+                                <div>$28</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Ad Group Data Dropdown -->
+                <div id="group-data-1" class="expand-content bg-green-50 border-l-4 border-green-500">
+                    <div class="p-4">
+                        <h4 class="font-semibold text-green-800 mb-3">📊 Dữ liệu theo Ad Group</h4>
+                        
+                        <!-- Ad Group 1 -->
+                        <div class="mb-3">
+                            <div class="flex items-center justify-between bg-white p-3 rounded border">
+                                <div class="flex items-center">
+                                    <button onclick="toggleAdsData(1, 1)" class="mr-3 text-green-600 hover:text-green-800">
+                                        <span class="arrow transition-transform" id="ads-arrow-1-1">▶</span>
+                                    </button>
+                                    <span class="font-medium">Ad Group: Sleeping Pills Benefits</span>
+                                </div>
+                                <div class="flex space-x-4 text-sm">
+                                    <span>Impressions: 120</span>
+                                    <span>Clicks: 18</span>
+                                    <span>CTR: 15.0%</span>
+                                    <span>Cost: $75</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Ads under Ad Group 1 -->
+                            <div id="ads-data-1-1" class="expand-content ml-6 mt-2 bg-gray-50 border-l-2 border-green-300">
+                                <div class="p-3">
+                                    <div class="text-sm space-y-2">
+                                        <div class="flex justify-between p-2 bg-white rounded">
+                                            <span>Ad: "Best Sleeping Pills for Better Sleep"</span>
+                                            <div class="flex space-x-3">
+                                                <span>Impressions: 60</span>
+                                                <span>Clicks: 9</span>
+                                                <span>Cost: $35</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex justify-between p-2 bg-white rounded">
+                                            <span>Ad: "Natural Sleep Solutions"</span>
+                                            <div class="flex space-x-3">
+                                                <span>Impressions: 60</span>
+                                                <span>Clicks: 9</span>
+                                                <span>Cost: $40</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Ad Group 2 -->
+                        <div class="mb-3">
+                            <div class="flex items-center justify-between bg-white p-3 rounded border">
+                                <div class="flex items-center">
+                                    <button onclick="toggleAdsData(1, 2)" class="mr-3 text-green-600 hover:text-green-800">
+                                        <span class="arrow transition-transform" id="ads-arrow-1-2">▶</span>
+                                    </button>
+                                    <span class="font-medium">Ad Group: Sleep Disorders Treatment</span>
+                                </div>
+                                <div class="flex space-x-4 text-sm">
+                                    <span>Impressions: 93</span>
+                                    <span>Clicks: 14</span>
+                                    <span>CTR: 15.1%</span>
+                                    <span>Cost: $50</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Campaign Row 2 -->
+            <div class="campaign-row">
+                <div class="grid grid-cols-7 gap-4 p-4 border-b hover:bg-gray-50 items-center">
+                    <div class="text-blue-600 font-medium">Facebook - Indian Buffet Restaurants Campaign</div>
+                    <div class="flex space-x-2">
+                        <button onclick="toggleDateData(2)" class="action-btn bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm flex items-center" title="Xem dữ liệu 7 ngày qua">
+                            <span class="mr-1">📅</span>
+                            <span class="arrow transition-transform" id="date-arrow-2">▼</span>
+                        </button>
+                        <button onclick="toggleAdGroupData(2)" class="action-btn bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm flex items-center" title="Xem theo Ad Group">
+                            <span class="mr-1">📊</span>
+                            <span class="arrow transition-transform" id="group-arrow-2">▼</span>
+                        </button>
+                    </div>
+                    <div><span class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm whitespace-nowrap">PENDING</span></div>
+                    <div>3</div>
+                    <div>264</div>
+                    <div>40</div>
+                    <div>15.2%</div>
+                </div>
+                
+                <!-- Date Data Dropdown for Campaign 2 -->
+                <div id="date-data-2" class="expand-content bg-blue-50 border-l-4 border-blue-500">
+                    <div class="p-4">
+                        <h4 class="font-semibold text-blue-800 mb-3">📅 Dữ liệu 7 ngày qua</h4>
+                        <div class="grid grid-cols-5 gap-4 text-sm">
+                            <div class="font-medium">Ngày</div>
+                            <div class="font-medium">Impressions</div>
+                            <div class="font-medium">Clicks</div>
+                            <div class="font-medium">CTR</div>
+                            <div class="font-medium">Cost</div>
+                        </div>
+                        <div class="space-y-2 mt-2">
+                            <div class="grid grid-cols-5 gap-4 text-sm py-1">
+                                <div>2024-01-15</div>
+                                <div>88</div>
+                                <div>15</div>
+                                <div>17.0%</div>
+                                <div>$65</div>
+                            </div>
+                            <div class="grid grid-cols-5 gap-4 text-sm py-1">
+                                <div>2024-01-14</div>
+                                <div>92</div>
+                                <div>13</div>
+                                <div>14.1%</div>
+                                <div>$58</div>
+                            </div>
+                            <div class="grid grid-cols-5 gap-4 text-sm py-1">
+                                <div>2024-01-13</div>
+                                <div>84</div>
+                                <div>12</div>
+                                <div>14.3%</div>
+                                <div>$57</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Ad Group Data Dropdown for Campaign 2 -->
+                <div id="group-data-2" class="expand-content bg-green-50 border-l-4 border-green-500">
+                    <div class="p-4">
+                        <h4 class="font-semibold text-green-800 mb-3">📊 Dữ liệu theo Ad Group</h4>
+                        
+                        <!-- Ad Group 1 -->
+                        <div class="mb-3">
+                            <div class="flex items-center justify-between bg-white p-3 rounded border">
+                                <div class="flex items-center">
+                                    <button onclick="toggleAdsData(2, 1)" class="mr-3 text-green-600 hover:text-green-800">
+                                        <span class="arrow transition-transform" id="ads-arrow-2-1">▶</span>
+                                    </button>
+                                    <span class="font-medium">Ad Group: Indian Food Delivery</span>
+                                </div>
+                                <div class="flex space-x-4 text-sm">
+                                    <span>Impressions: 150</span>
+                                    <span>Clicks: 22</span>
+                                    <span>CTR: 14.7%</span>
+                                    <span>Cost: $95</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Ads under Ad Group 1 -->
+                            <div id="ads-data-2-1" class="expand-content ml-6 mt-2 bg-gray-50 border-l-2 border-green-300">
+                                <div class="p-3">
+                                    <div class="text-sm space-y-2">
+                                        <div class="flex justify-between p-2 bg-white rounded">
+                                            <span>Ad: "Authentic Indian Buffet Near You"</span>
+                                            <div class="flex space-x-3">
+                                                <span>Impressions: 75</span>
+                                                <span>Clicks: 11</span>
+                                                <span>Cost: $45</span>
+                                            </div>
+                                        </div>
+                                        <div class="flex justify-between p-2 bg-white rounded">
+                                            <span>Ad: "Best Indian Restaurant Deals"</span>
+                                            <div class="flex space-x-3">
+                                                <span>Impressions: 75</span>
+                                                <span>Clicks: 11</span>
+                                                <span>Cost: $50</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Legend -->
+        <div class="mt-6 p-4 bg-white rounded-lg border">
+            <h3 class="font-semibold mb-3 text-gray-800">Chú thích các buttons:</h3>
+            <div class="flex flex-wrap gap-4 text-sm">
+                <div class="flex items-center">
+                    <span class="bg-blue-500 text-white px-2 py-1 rounded mr-2 text-xs">📅</span>
+                    <span>Xem dữ liệu 7 ngày qua (group by date)</span>
+                </div>
+                <div class="flex items-center">
+                    <span class="bg-green-500 text-white px-2 py-1 rounded mr-2 text-xs">📊</span>
+                    <span>Xem theo Ad Group (có thể mở rộng xem Ads)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Toggle Date Data
+        function toggleDateData(campaignId) {
+            const element = document.getElementById(`date-data-${campaignId}`);
+            const arrow = document.getElementById(`date-arrow-${campaignId}`);
+            
+            // Close other date dropdowns
+            document.querySelectorAll('[id^="date-data-"]').forEach(el => {
+                if (el.id !== `date-data-${campaignId}`) {
+                    el.classList.remove('active');
+                }
+            });
+            document.querySelectorAll('[id^="date-arrow-"]').forEach(el => {
+                if (el.id !== `date-arrow-${campaignId}`) {
+                    el.style.transform = 'rotate(0deg)';
+                }
+            });
+            
+            // Close Ad Group data for this campaign
+            const groupElement = document.getElementById(`group-data-${campaignId}`);
+            const groupArrow = document.getElementById(`group-arrow-${campaignId}`);
+            if (groupElement.classList.contains('active')) {
+                groupElement.classList.remove('active');
+                groupArrow.style.transform = 'rotate(0deg)';
+            }
+            
+            // Toggle current
+            element.classList.toggle('active');
+            arrow.style.transform = element.classList.contains('active') ? 'rotate(180deg)' : 'rotate(0deg)';
+        }
+
+        // Toggle Ad Group Data
+        function toggleAdGroupData(campaignId) {
+            const element = document.getElementById(`group-data-${campaignId}`);
+            const arrow = document.getElementById(`group-arrow-${campaignId}`);
+            
+            // Close other group dropdowns
+            document.querySelectorAll('[id^="group-data-"]').forEach(el => {
+                if (el.id !== `group-data-${campaignId}`) {
+                    el.classList.remove('active');
+                }
+            });
+            document.querySelectorAll('[id^="group-arrow-"]').forEach(el => {
+                if (el.id !== `group-arrow-${campaignId}`) {
+                    el.style.transform = 'rotate(0deg)';
+                }
+            });
+            
+            // Close Date data for this campaign
+            const dateElement = document.getElementById(`date-data-${campaignId}`);
+            const dateArrow = document.getElementById(`date-arrow-${campaignId}`);
+            if (dateElement.classList.contains('active')) {
+                dateElement.classList.remove('active');
+                dateArrow.style.transform = 'rotate(0deg)';
+            }
+            
+            // Toggle current
+            element.classList.toggle('active');
+            arrow.style.transform = element.classList.contains('active') ? 'rotate(180deg)' : 'rotate(0deg)';
+        }
+
+        // Toggle Ads Data within Ad Group
+        function toggleAdsData(campaignId, groupId) {
+            const element = document.getElementById(`ads-data-${campaignId}-${groupId}`);
+            const arrow = document.getElementById(`ads-arrow-${campaignId}-${groupId}`);
+            
+            element.classList.toggle('active');
+            arrow.style.transform = element.classList.contains('active') ? 'rotate(90deg)' : 'rotate(0deg)';
+        }
+    </script>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>

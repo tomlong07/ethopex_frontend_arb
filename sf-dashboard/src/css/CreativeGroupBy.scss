@@ -1,0 +1,72 @@
+.cretive-group-by {
+  border-top-width: 1px;
+  border-right-width: 1px;
+  border-left-width: 1px;
+
+  //date picker
+  .relative.w-full .relative.block {
+    .py-2\.5 {
+      padding-top: 6px !important;
+      padding-bottom: 6px !important;
+    }
+  }
+
+  .hidden.absolute.inset-0.justify-center.items-center {
+    visibility: hidden;
+  }
+
+  .n-button {
+    height: 38px;
+  }
+
+  .selected {
+    background: #ddd;
+  }
+
+  .border-unset {
+    border: unset;
+  }
+
+  .dp__menu {
+    &_content_wrapper {
+      border-width: 1px;
+    }
+
+    .dp__calendar_header_item {
+      font-weight: 500 !important;
+    }
+
+    .dp__preset_ranges {
+      width: 150px;
+      color: #f43f5e;
+    }
+
+    .dp__action.dp__select {
+      border-width: 1px;
+      background: #5e6890;
+      color: white;
+      font-weight: 500;
+      padding: 5px 10px;
+    }
+
+    .dp__action.dp__cancel {
+      border-width: 1px;
+      margin-right: 10px;
+      color: #000000;
+      font-weight: 500;
+      padding: 5px 10px;
+    }
+  }
+
+  .dp__input_wrap {
+    .dp__input_icon_pad {
+      padding-left: 15px;
+    }
+
+    .dp__input_icon {
+      left: unset;
+      right: 0;
+      border-left: 1px solid #bdbac2;
+    }
+  }
+}

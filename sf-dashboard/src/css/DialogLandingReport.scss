@@ -1,0 +1,63 @@
+:root {
+  --color-blue-custom: #5F88D1;
+}
+
+.landing-info-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 10px 12px 0 0;
+}
+
+.landing-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  background: rgba(0, 0, 0, 0.03);
+  padding: 16px;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.landing-info-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.landing-info-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-blue-custom);
+}
+
+.landing-info-value {
+  font-size: 14px;
+  line-height: 1.3;
+
+}
+
+.landing-info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.landing-info-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-blue-custom);
+}
+
+.landing-info-content-box {
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 16px;
+  border-radius: 5px;
+  font-size: 13.5px;
+  line-height: 2;
+  color: var(--text-primary);
+}
+
+

@@ -1,0 +1,40 @@
+.select-container::-webkit-scrollbar {
+  height: 18px;
+}
+.select-container {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+.blink-chart {
+  position: relative;
+  width: fit-content;
+}
+
+.blink-chart:after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -12px;
+  transform: translateY(-50%);
+  width: 8.39px;
+  height: 8.39px;
+  border-radius: 50%;
+  background-color: #49a849;
+  animation: flash 1s infinite;
+}
+
+.blink-chart.blink-2:after {
+  right: 0;
+}
+
+// Thêm đoạn này để đảm bảo hiển thị của các tag
+.n-base-selection-tag {
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.n-base-selection-tag__content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

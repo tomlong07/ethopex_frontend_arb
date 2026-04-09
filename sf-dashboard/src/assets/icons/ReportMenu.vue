@@ -1,0 +1,11 @@
+<template>
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    id="ds-icon-dashboard-analytics"
+  >
+    <rect width="5" height="20" x="9.47" y="2" rx="1" ry="1"></rect>
+    <rect width="5" height="15" x="17" y="7" rx="1" ry="1"></rect>
+    <rect width="5" height="10" x="2" y="12" rx="1" ry="1"></rect>
+  </svg>
+</template>

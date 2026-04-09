@@ -1,0 +1,742 @@
+<script>
+	//Import from vuejs
+	const dataRules = {{{import_data}}};
+	const pricingIds = {{{import_update_ids}}};
+	const adManagerId = "{{{import_admanager_account}}}";
+	const VERSION = '{{{import_version}}}';
+
+	const name = "{{{import_name}}}";
+	const pricingType = "{{{import_pricing}}}";
+	const DEBUG = {{{import_debug}}};
+
+	const HLINK = '{{{import_hlink}}}';
+	const HNAME = '{{{import_hname}}}';
+	const HVALUE = '{{{import_hvalue}}}';
+
+	console.info("DEBUG: " + DEBUG);
+
+	const MODE = '{{{import_mode}}}';
+	const MODE_CREATE = MODE === "create";
+	const MODE_UPDATE = MODE === "update";
+
+	const MAX_RETRY = 3;
+	const MAX_RETRIES_UPDATE_DB = 5;
+	const TIME_TO_WAIT = 7;// thời gian request google giữa mỗi lần
+	const TIME_SLEEP_UPDATE_DB = 2e3;
+
+	console.info("MODE_CREATE: " + MODE_CREATE);
+	console.info("MODE_UPDATE: " + MODE_UPDATE);
+
+	let notifyDiv = null, divDone = null, divCopy = null;
+	let statusJob = { created: 0, updated: 0, error: 0 };
+	let errIds = [];
+	let objectGGIDsWithUniqueId = {};
+	const networkId = window.location.pathname.replace("/", "");
+
+	function loadJQuery() { var e = document.createElement("script"); e.src = "https://code.jquery.com/jquery-3.6.0.min.js", e.onload = function () { console.info("jQuery loaded successfully!"), $(document).ready(function () { setTimeout(() => { init() }, 5e3) }) }, document.head.appendChild(e) }
+
+	function clearFixed() { let e = document.querySelectorAll(".fixed-div"); e.forEach(e => { e.remove() }) }
+	function addFixedDivDoneToBody() { (divDone = document.createElement("div")).classList.add("fixed-div", "fixed-div-done"), divDone.textContent = "Status:" + " v" + VERSION, document.body.appendChild(divDone); var d = document.createElement("style"); d.textContent = ".fixed-div-done{position:fixed;top:200px;right:500px;width:200px;height:100px;background-color:#f0f0f0;border:1px solid #ccc;padding:10px;border-radius:5px;box-shadow:0 0 10px rgba(0,0,0,.2);z-index:9999;font-size:20px;color:green}", document.head.appendChild(d) } function addFixedDivToBody() { (notifyDiv = document.createElement("div")).classList.add("fixed-div", "fixed-div-notify"), notifyDiv.textContent = "Notify:", document.body.appendChild(notifyDiv); var d = document.createElement("style"); d.textContent = ".fixed-div-notify{position:fixed;top:200px;right:200px;width:200px;height:500px;overflow:scroll;background-color:#f0f0f0;border:1px solid #ccc;padding:10px;border-radius:5px;box-shadow:0 0 10px rgba(0,0,0,.2);z-index:9999}", document.head.appendChild(d) }
+	function addFixedDivCopyToBody() { (divCopy = document.createElement("div")).classList.add("fixed-div", "fixed-div-copy"), divCopy.textContent = "Job", document.body.appendChild(divCopy); var d = document.createElement("style"); d.textContent = ".fixed-div-copy{position:fixed;top: 400px;right: 500px;width:200px;height:100px;cursor:pointer;background-color:#f0f0f0;border:1px solid #ccc;padding:10px;border-radius:5px;box-shadow:0 0 10px rgba(0,0,0,.2);z-index:9999;font-size:20px;color:green;word-wrap: break-word}", document.head.appendChild(d) }
+	function notify(e) { console.info(e), notifyDiv.innerHTML += "<br>" + e }
+	function status(status = "") { if (!status) { return; }; statusJob[status]++, divCopy.innerHTML = JSON.stringify(statusJob) }
+	function done(e) { console.info(e), divDone.innerHTML += "<br>" + e }
+	async function sleep(e) { return new Promise(n => setTimeout(n, e)) } function dateNow() { var e, n = new Date, t = n.getDate(), r = n.getMonth() + 1; return n.getFullYear() + "-" + (r < 10 ? "0" : "") + r + "-" + (t < 10 ? "0" : "") + t }
+	function clone(input) { return JSON.parse(JSON.stringify(input)) };
+
+	clearFixed(), addFixedDivToBody(), addFixedDivDoneToBody(), addFixedDivCopyToBody(""), loadJQuery();
+
+
+
+	async function init() {
+		if (adManagerId !== networkId) {
+			done("Network ID is not correct " + adManagerId + " vs " + networkId);
+			return;
+		}
+
+		if (!dataRules || dataRules.length === 0) {
+			done("Missing dataRules");
+
+			return;
+		}
+
+		if (MODE_CREATE) {
+			create();
+			return;
+		}
+
+		if (!pricingIds || pricingIds.length === 0) {
+			done("Missing pricingIds");
+
+			return;
+		}
+
+		notify(adManagerId + " starting...")
+
+
+		let timeRun = dataRules.length;
+		if (timeRun > 200) {
+			done("Too many rule, please decrease it!");
+
+			return;
+		}
+
+		if (timeRun > pricingIds.length) {
+			done("Please check dataRules and pricingIds, they are not match!" + "dataRules: " + dataRules.length + " vs pricingIds: " + pricingIds.length);
+			return;
+		}
+
+		let dataInGoogle = await getListPricingRulesV2({ limit: "300" });
+
+		for (let index = 0; index < dataInGoogle.data.length; index++) {
+			const element = dataInGoogle.data[index];
+			if (!objectGGIDsWithUniqueId[element["151"]]) {
+
+				try {
+					objectGGIDsWithUniqueId[element["151"]] = element["3171"][0]["1555"];
+
+				} catch (error) {
+					console.error(element, error);
+				}
+			}
+		}
+
+
+		for (let index = 0; index < dataRules.length; index++) {
+			const element = dataRules[index];
+			const pricing_rule_id = pricingIds[index];
+
+			await doing(element, pricing_rule_id);
+		}
+
+		if (errIds.length != 0) {
+			console.info("Try again error ids: " + JSON.stringify(errIds));
+			statusJob.failed = 0;
+			const newUpdateIds = clone(errIds);
+			errIds = [];
+			for (let index = 0; index < newUpdateIds.length; index++) {
+				const element = newUpdateIds[index];
+
+				await doing(element.element, element.pricing_rule_id);
+			}
+		}
+
+		if (errIds.length != 0) {
+			console.info("Can not update error ids: " + JSON.stringify(errIds));
+			notify("Can not update error ids: " + JSON.stringify(errIds));
+		}
+		done("Success!");
+	}
+
+	async function tryUpdateToDB(r) { if (DEBUG) return; let t = MAX_RETRIES_UPDATE_DB; for (; t > 0;)try { let a = await updateToDB(r); return console.info("Update successful", r), a } catch (d) { console.error("Update failed. Retrying..."), --t > 0 && await sleep(TIME_SLEEP_UPDATE_DB) } console.error("Max retries exceeded. Update failed.", r) }
+
+	async function updateToDB(opts = {}) {
+
+		let obj = {
+			"name": opts.name,
+			"gam_id": adManagerId,
+			"pricing_rule_id": Number(opts.pricing_rule_id),
+		}
+
+		let headers = { "content-type": "application/json" };
+		headers[HNAME] = HVALUE;
+
+		var settings = {
+			"url": HLINK,
+			"method": "POST",
+			"timeout": 0,
+			"headers": headers,
+			"data": JSON.stringify(obj),
+		};
+
+		return await $.ajax(settings)
+	}
+
+	async function create() {
+		notify(adManagerId + " create starting...");
+
+		for (let index = 0; index < dataRules.length; index++) {
+			const element = dataRules[index];
+
+			await doingCreate(element);
+		}
+	}
+
+	async function doingCreate(element) {
+		await sleep(TIME_TO_WAIT * 1000);
+
+		const maxRetry = MAX_RETRY;
+		let retryCount = 0;
+		let ggRes;
+
+		while (retryCount < maxRetry) {
+			try {
+				ggRes = await createPricingRule(
+					getInfoPricing(element, {
+						name: name + " - " + Date.now(),
+					}));
+			} catch (error) {
+				ggRes = error;
+			}
+
+			console.info(ggRes, "ggRes");
+			if (ggRes.ok) {
+				console.info("success");
+				notify("success: ");
+				status("created");
+
+				const update = await tryUpdateToDB({ name: ggRes.data.name, pricing_rule_id: isString(ggRes.data.id) ? Number(ggRes.data.id) : ggRes.data.id });
+				if (update !== "ok") {
+					notify("Error update to DB");
+					console.error(update);
+				}
+
+				break; // Thoát vòng lặp nếu thành công
+			} else {
+				retryCount++;
+				if (retryCount < maxRetry) {
+					await sleep(10000); // Chờ 10 giây trước khi thử lại
+				}
+			}
+		}
+
+		if (!ggRes.ok) {
+			status("error");
+
+			notify("error");
+			return;
+		}
+	}
+
+	async function createPricingRule(opts = {}) {
+		let googleInfo = await getGoogleInfo();
+
+		if (!googleInfo.ok || !opts.ok) {
+			return { ok: false };
+		}
+
+		if (!opts.name || !opts.price) {
+			console.error("Missing name / price", opts);
+			return { ok: false, data: "Missing name / price", opts: opts };
+		}
+
+		const pricingNow = pricingType === 'floor' ? 66989036 : 1827576431;
+		//66989036 Set floor prices
+		//1827576431 Set target CPMs
+
+		let info = getInfo(opts);
+
+		if (!info.ok) {
+			console.error("Please check info", info);
+			return { ok: false, data: "Please check info", info: info };
+		}
+
+		let payload = {
+    "method": "createPricingRule",
+    "params": {
+        "2": {
+            "1119": "552887103580793414"
+        },
+        "1532": {
+            "1025": 1925346054,
+            "2103": {
+                "163": {},
+								"845": opts.adUnits,
+                "881": {
+                   "2253": {
+											"660": 2531,
+										}
+                },
+                "1085": {
+									"3075": opts.countries,
+								},
+                "2395": {},
+                "2527": {},
+                "2921": {
+                    "1104": false
+                },
+                "3417": {
+                    "1225": {
+                        "3786": false
+                    },
+                    "1543": {
+                        "290": false
+                    },
+                    "2381": {
+												"2488": opts.devices,
+										},
+                    "3125": {}
+                },
+                "3792": true
+            },
+            "2377": false,
+            "3171": [
+                {
+                    "903": pricingNow,
+                    "1021": {
+                        "385": "USD",
+                        "2182": info.pricing
+                    },
+                    "3684": {
+                        "403": {},
+                        "1337": {},
+                        "2077": {},
+                        "2929": {},
+                        "3785": {
+                            "1033": true
+                        }
+                    }
+                }
+            ],
+            "3844": opts.name
+							}
+					}
+			}
+
+		if (info.customValue) {
+			payload["params"]["1532"]["2103"]["881"] = info.customValue;
+		}
+
+		var settings = {
+			"url": "https://admanager.google.com/dfp/v2/exchange/rpc/PricingRuleService?methodName=createPricingRule&networkCode="+googleInfo.networkId+"&authuser="+googleInfo.authuser+"&hl=en-US&f.sid="+googleInfo.sessionId+"&rpcTrackingId=%2Fdfp%2Fv2%2Fexchange%2Frpc%2FPricingRuleService%3FmethodName%3DcreatePricingRule%26networkCode%3D"+googleInfo.networkId+"%26authuser%3D"+googleInfo.authuser+"%26hl%3Den-US%26f.sid%3D"+googleInfo.sessionId+"%3A1",
+			"method": "POST",
+			"timeout": 0,
+			"headers": {
+				"activityappid": "EXCHANGE",
+				"activitylabels": "",
+				"activityname": "Pricing.SavePricingRule",
+				"activitynewplaceurl": "inventory/pricing/create/tab=settings",
+				"activitypreviousplaceurl": "inventory/pricing/create/tab=settings",
+				"activitytype": "SAVE",
+				"content-type": "application/javascript; charset=UTF-8",
+				"x-client-date": googleInfo.timestamp,
+				"x-framework-xsrf-token": googleInfo.token,
+				"x-jspb-rpc-method": "createPricingRule"
+			},
+			"data": JSON.stringify(payload),
+		};
+
+		let res = await $.ajax(settings);
+
+		if (res && res.result && res.result["1097"] && res.result["1097"]["151"] && res.result["1097"]["3844"]) {
+			let success = {
+				id: res.result["1097"]["151"],
+				name: res.result["1097"]["3844"],
+			}
+
+			console.info(success);
+
+			return { ok: true, data: success };
+		}
+		console.error("Create pricing rule failed", res);
+
+		return { ok: false, data: res };
+	}
+
+	async function doing(element, pricing_rule_id) {
+		await sleep(TIME_TO_WAIT * 1000);
+
+		const text = 'Doing job: pricing_rule_id: ' + pricing_rule_id;
+
+		console.info(text);
+
+		notify(text);
+
+		const maxRetry = MAX_RETRY;
+		let retryCount = 0;
+		let ggRes;
+
+		while (retryCount < maxRetry) {
+			try {
+				ggRes = await updatePricingRuleV2(
+					getInfoPricing(element, {
+						isUpdate: true, pricing_rule_id: pricing_rule_id,
+						objectGGIDsWithUniqueId: objectGGIDsWithUniqueId,
+						name: name + " - " + Date.now(),
+					}));
+			} catch (error) {
+				ggRes = error;
+			}
+
+			console.info(ggRes, "ggRes");
+			if (ggRes.ok) {
+				console.info("success");
+				notify("<success: " + pricing_rule_id);
+				status("updated");
+				break; // Thoát vòng lặp nếu thành công
+			} else {
+				retryCount++;
+				if (retryCount < maxRetry) {
+					await sleep(10000); // Chờ 10 giây trước khi thử lại
+				}
+			}
+		}
+
+		if (!ggRes.ok) {
+			let payload = {
+				id: element.id,
+				log: JSON.stringify(ggRes),
+			}
+
+			status("error");
+			errIds.push({ element: element, pricing_rule_id: pricing_rule_id });
+
+			console.error("error", pricing_rule_id);
+			notify("error: " + pricing_rule_id);
+		}
+	}
+
+	function getInfo(opts = {}) {
+		let res = {
+			pricing: "",
+			customValue: null,
+			ok: true,
+		};
+
+		let temp = 0.0;
+
+		switch (true) {
+			case typeof opts.price == "number":
+				temp = opts.price
+				break;
+			case isString(opts.price):
+				temp = parseFloat(opts.price)
+				break;
+			default:
+				break;
+		}
+
+		if (!temp) {
+			res.ok = false;
+			console.error("Please check price", opts.price);
+		}
+
+		temp = temp.toFixed(2);
+
+		temp = temp * 1000000;
+		temp = Math.round(temp);
+
+		res.pricing = temp.toString();
+
+		return res;
+	}
+
+	function isString(input) {
+		return (typeof input === 'string' || input instanceof String);
+	}
+
+	async function updatePricingRuleV2(opts = {}) {
+		//console.info(opts);
+		let googleInfo = await getGoogleInfo();
+
+		if (!googleInfo.ok || !opts.ok) {
+			return { ok: false };
+		}
+
+		if (!opts.id) {
+			console.error("Rule id not found");
+			return { ok: false, data: "Rule id not found" };
+		}
+
+		if (!opts.name || !opts.price || !opts.objectGGIDsWithUniqueId) {
+			console.error("Missing info", opts);
+
+			return { ok: false, data: "Missing info", opts: opts };
+		}
+
+		let info = getInfo(opts);
+
+		if (!info.ok) {
+			console.error("Please check info", info);
+
+			return { ok: false, data: "Please check info", info: info };
+		}
+
+		const dateObj = new Date();
+		const month = dateObj.getUTCMonth() + 1; //months from 1-12
+		const day = dateObj.getUTCDate();
+		const year = dateObj.getUTCFullYear();
+
+		const hours = dateObj.getUTCHours();
+		const minutes = dateObj.getUTCMinutes();
+		const seconds = dateObj.getUTCSeconds();
+
+		const pricingNow = pricingType === 'floor' ? 66989036 : 1827576431;
+		//66989036 Set floor prices
+		//1827576431 Set target CPMs
+
+		let payload = {
+			"method": "updatePricingRule",
+			"params": {
+				"2": {
+					"1119": "10577265281447217414"
+				},
+				"55": {
+					"151": opts.id,
+					"1025": 807292011,
+					"2103": {
+						"163": {},
+						"845": opts.adUnits,
+						"881": {
+							"2253": {
+								"660": 2531,
+							}
+						},
+						"1085": {
+							"3075": opts.countries,
+						},
+						"2395": {},
+						"2527": {},
+						"2921": {
+							"1104": false
+						},
+						"3417": {
+							"1225": {
+								"3786": false
+							},
+							"1543": {
+								"290": false
+							},
+							"2381": {
+								"2488": opts.devices,
+							},
+							"3125": {}
+						},
+						"3792": true
+					},
+					"2377": false,
+					"3171": [
+						{
+							"903": pricingNow,
+							"1021": {
+								"385": "USD",
+								"2182": info.pricing,
+							},
+							"1555": opts.objectGGIDsWithUniqueId[opts.id],
+							"3069": {
+								"1636": "Z",
+								"2802": seconds,
+								"2958": minutes,
+								"3371": {
+									"301": day,
+									"398": year,
+									"2319": month
+								},
+								"4030": hours
+							},
+							"3684": {
+								"403": {},
+								"1337": {},
+								"2077": {},
+								"2929": {},
+								"3785": {
+									"1033": true
+								}
+							}
+						}
+					],
+					"3844": opts.name,
+				}
+			}
+		}
+
+		var settings = {
+			"url": "https://admanager.google.com/dfp/v2/exchange/rpc/PricingRuleService?methodName=updatePricingRule&networkCode=" + googleInfo.networkId + "&authuser=" + googleInfo.authuser + "&hl=en-US&f.sid=" + googleInfo.sessionId + "&rpcTrackingId=%2Fdfp%2Fv2%2Fexchange%2Frpc%2FPricingRuleService%3FmethodName%3DupdatePricingRule%26networkCode%3D" + googleInfo.networkId + "%26authuser%3D" + googleInfo.authuser + "%26hl%3Den-US%26f.sid%3D" + googleInfo.sessionId + "%3A1",
+			"method": "POST",
+			"timeout": 0,
+			"headers": {
+				"activityappid": "EXCHANGE",
+				"activitylabels": "",
+				"activityname": "Pricing.SavePricingRule",
+				"activitynewplaceurl": "inventory/pricing/detail/pricing_id=" + opts.id + "&tab=settings",
+				"activitypreviousplaceurl": "inventory/pricing/detail/pricing_id=" + opts.id + "&tab=settings",
+				"activitytype": "SAVE",
+				"content-type": "application/javascript; charset=UTF-8",
+				"x-client-date": googleInfo.timestamp,
+				"x-framework-xsrf-token": googleInfo.token,
+				"x-jspb-rpc-method": "updatePricingRule"
+			},
+			"data": JSON.stringify(payload),
+		};
+
+		let res = await $.ajax(settings);
+
+		if (res && res.result && res.result["490"] && res.result["490"]["151"] && res.result["490"]["3844"]) {
+			let success = {
+				id: res.result["490"]["151"],
+				name: res.result["490"]["3844"],
+			}
+
+			console.info(success);
+
+			return { ok: true, data: success };
+		}
+
+		console.error("Update pricing rule failed", res, opts, info);
+		return { ok: false, data: res };
+	}
+
+	function getInfoPricing(raw, opts = {}) {
+		let info = {
+			ok: true,
+			name: opts.name,
+		};
+
+		if (opts.isUpdate) {
+			info.id = opts.pricing_rule_id.toString();
+		}
+
+		if (raw.eCpm) {
+			info.price = raw.eCpm;
+		}
+
+		if (raw.countryId) {
+			info.countries = [];
+			let data = stringToArr(raw.countryId);
+			data.forEach(element => {
+				info.countries.push({ "259": element });
+			});
+		}
+
+		if (raw.deviceCategoryId) {
+			info.devices = [];
+			let data = stringToArr(raw.deviceCategoryId);
+
+			data.forEach(element => {
+				info.devices.push({ "2585": element });
+			});
+		}
+
+		if (raw.adUnitId2) {
+			info.adUnits = {
+				"1738": [],
+			};
+			let data = stringToArr(raw.adUnitId2);
+
+			data.forEach(element => {
+				info.adUnits["1738"].push({
+					"892": element,
+					"1825": true
+				});
+			});
+		}
+
+		if (opts.objectGGIDsWithUniqueId) {
+			info.objectGGIDsWithUniqueId = opts.objectGGIDsWithUniqueId;
+		}
+
+		return info;
+	}
+
+	function stringToArr(input) {
+		let str = input;
+		return str.split(',').map(item => item.trim());
+	}
+
+	async function getListPricingRulesV2(opts = {}) {
+		let googleInfo = await getGoogleInfo();
+
+		if (!googleInfo.ok) {
+			return;
+		}
+
+		let limit = opts.limit || "100";
+		let payload = {
+			"method": "getPricingRulesByStatement",
+			"params": {
+				"2": {
+					"1119": "12458585571381879226"
+				},
+				"358": {
+					"1981": "WHERE ((Discount = false OR Discount IS NULL)) ORDER BY Name ASC LIMIT " + limit + " OFFSET 0"
+				}
+			}
+		}
+
+		var settings = {
+			"url": "https://admanager.google.com/dfp/v2/exchange/rpc/PricingRuleService?methodName=getPricingRulesByStatement&networkCode=" + networkId + "&authuser=" + googleInfo.authuser + "&hl=en-US&f.sid=" + googleInfo.sessionId + "&rpcTrackingId=PricingRuleService.getPricingRulesByStatement%3A1",
+			"method": "POST",
+			"timeout": 0,
+			"headers": {
+				"activityappid": "EXCHANGE",
+				"activitylabels": "",
+				"activityname": "Initial Load",
+				"activitynewplaceurl": "inventory/pricing/list",
+				"activitypreviousplaceurl": "https://admanager.google.com/" + networkId + "#inventory/pricing/list",
+				"activitytype": "INITIAL_LOAD",
+
+				"content-type": "application/javascript; charset=UTF-8",
+				"x-client-date": googleInfo.timestamp,
+				"x-framework-xsrf-token": googleInfo.token,
+				"x-jspb-rpc-method": "getPricingRulesByStatement"
+			},
+			"data": JSON.stringify(payload),
+		};
+
+		const res = await $.ajax(settings);
+
+		let dataRes = {};
+
+		try {
+			dataRes.data = res.result["3440"]["3400"];
+			dataRes.response = res;
+		} catch (error) { }
+
+		return dataRes;
+	}
+
+	async function getGoogleInfo(opts = {}) {
+		//opts = { try: true } await getGoogleInfo({try: true})
+		//Try phục vụ nếu google chưa init xong => biển gg chưa có => đợi 10s để thử lấy lại
+		let res = {
+			ok: false,
+		}
+
+		try {
+			res = {
+				ok: true,
+				token: window.$acx.xsrfToken,
+				sessionId: window.sessionId,
+				timestamp: window._initialData["EXCHANGE"]["buildTimestamp"],
+				networkId: networkId,
+			}
+
+			try {
+				res.authuser = window.GOOGLE_HELP_CHAT_ARGUMENTS[0].authuser;
+			} catch (error) {
+
+			}
+		} catch (error) {
+			if (opts.try) {
+				await new Promise((resolve) => setTimeout(resolve, 10000)); // Chờ 10 giây trước khi thử lại
+
+				try {
+					res = {
+						ok: true,
+						token: window.$acx.xsrfToken,
+						sessionId: window.sessionId,
+						timestamp: window._initialData["EXCHANGE"]["buildTimestamp"],
+						networkId: networkId,
+					}
+
+					try {
+						res.authuser = window.GOOGLE_HELP_CHAT_ARGUMENTS[0].authuser;
+					} catch (error) {
+
+					}
+				} catch (error) {
+
+				}
+
+			}
+
+		}
+
+		if (!res.token || !res.sessionId || !res.timestamp || !res.networkId) {
+			console.error("Missing google info", res);
+			res.ok = false;
+		}
+
+		return res;
+	}
+</script>

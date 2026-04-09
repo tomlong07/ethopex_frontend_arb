@@ -1,0 +1,3697 @@
+<script>
+
+//Import from vuejs
+const NUMBER_STYLE = {{{import_total}}};
+const START_STYLE_ID = {{{import_start}}};
+const NAME_STYLE = '{{{import_name}}}';
+const STYLE_TYPE = '{{{import_type}}}';
+const VERSION = '{{{import_version}}}';
+const HLINK = '{{{import_hlink}}}';
+const HNAME = '{{{import_hname}}}';
+const HVALUE = '{{{import_hvalue}}}';
+const SEARCH_STYLE = {{{import_style_search}}};
+const RELATED_STYLE = {{{import_style_related}}};
+const RELATED_SEARCH_PAGE_STYLE = {{{import_style_related_search_page}}};
+const UPDATE_IDS = {{{import_update_ids}}};
+const ORIGINAL_STYLE = "9671790211";
+
+const MODE = '{{{import_mode}}}';
+const MODE_CREATE = MODE === "create";
+const MODE_UPDATE = MODE === "update";
+
+console.log("MODE_CREATE: " + MODE_CREATE);
+console.log("MODE_UPDATE: " + MODE_UPDATE);
+
+const TIME_SLEEP = 1e3, TIME_SLEEP_UPDATE_DB = 2e3, MAX_RETRIES_UPDATE_DB = 5; let notifyDiv = null, divDone = null, list = null;
+
+function getAdsenseId() { let t = window.location.href, e = t.split("pub-"); if (2 != e.length) return; let n = e[1].split("/"); if (n.length >= 1) return n[0] }
+
+function addFixedDivDoneToBody() { (divDone = document.createElement("div")).classList.add("fixed-div-done"), divDone.textContent = "Status:" + " v"+VERSION, document.body.appendChild(divDone); var d = document.createElement("style"); d.textContent = ".fixed-div-done{position:fixed;top:200px;right:500px;width:200px;height:100px;background-color:#f0f0f0;border:1px solid #ccc;padding:10px;border-radius:5px;box-shadow:0 0 10px rgba(0,0,0,.2);z-index:9999;font-size:20px;color:green}", document.head.appendChild(d) } function addFixedDivToBody() { (notifyDiv = document.createElement("div")).classList.add("fixed-div"), notifyDiv.textContent = "Notify:", document.body.appendChild(notifyDiv); var d = document.createElement("style"); d.textContent = ".fixed-div{position:fixed;top:200px;right:200px;width:200px;height:500px;overflow:scroll;background-color:#f0f0f0;border:1px solid #ccc;padding:10px;border-radius:5px;box-shadow:0 0 10px rgba(0,0,0,.2);z-index:9999}", document.head.appendChild(d) }
+
+function loadJQuery() { var e = document.createElement("script"); e.src = "https://code.jquery.com/jquery-3.6.0.min.js", e.onload = function () { console.log("jQuery loaded successfully!"), $(document).ready(function () { setTimeout(() => { init() }, 5e3) }) }, document.head.appendChild(e) }
+
+async function sleep(e) { return new Promise(n => setTimeout(n, e)) } function dateNow() { var e, n = new Date, t = n.getDate(), r = n.getMonth() + 1; return n.getFullYear() + "-" + (r < 10 ? "0" : "") + r + "-" + (t < 10 ? "0" : "") + t }
+
+addFixedDivToBody(), addFixedDivDoneToBody(), loadJQuery();
+
+async function init() {
+  if (!MODE){
+    console.error("Missing mode");
+    divDone.innerHTML += "<br>Missing mode";
+    return;
+  }
+
+  console.log("init"+ " v" + VERSION + " " + (MODE_CREATE? "create" : "update"));
+
+  let info = getGoogleInfo();
+
+  info.adsenseId = getAdsenseId();
+
+
+  if (!info.adsenseId) { console.error("Missing adsenseId");divDone.innerHTML += "<br>Missing adsenseId";};
+
+  console.log(info);
+
+  if (ORIGINAL_STYLE){
+    let res = await getOldDataById(ORIGINAL_STYLE, info);
+    res = handleResponse(res);
+
+    if (res["1"]["1"] == ORIGINAL_STYLE){
+      console.info("Get data "+ORIGINAL_STYLE+" success!");
+    }
+
+    console.log(res);
+    return;
+  }
+
+  if (MODE_UPDATE){
+    if (!UPDATE_IDS || UPDATE_IDS.length == 0) {
+      console.error("Missing update ids");
+      divDone.innerHTML += "<br>Missing update ids";
+      return;
+    }
+
+    for (let index = 0; index < UPDATE_IDS.length; index++) {
+      await updateOneStyleById(info, UPDATE_IDS[index]);
+    }
+
+    divDone.innerHTML += "<br>Updated success!";
+
+    return;
+  }
+
+  if (MODE_CREATE){
+    if (!NUMBER_STYLE || !START_STYLE_ID){
+      divDone.innerHTML += "<br>Missing NUMBER_STYLE or START_STYLE_ID!";
+      return;
+    }
+    let jobs = [];
+
+    for (let index = START_STYLE_ID; index <= NUMBER_STYLE; index++) {
+      let name = NAME_STYLE + index + " - " + dateNow();
+
+      if (STYLE_TYPE != "") {
+        name += " " + STYLE_TYPE;
+      }
+
+      jobs.push({ name: name });
+    }
+
+    // jobs = [
+    //   { name: "[NEW_v3] Layout 14" },
+    // ];
+
+    console.log(jobs);
+
+    let dataResponse = [];
+
+    for (let index = 0; index < jobs.length; index++) {
+
+      console.log(jobs[index]);
+
+      notifyDiv.innerHTML += "<br>Doing job: " + jobs[index].name;
+
+      const jobDone = await doingOneJob(info, jobs[index]);
+      const update = await tryUpdateToDB(info, jobDone);
+      if (!update || !update.status) {
+        notifyDiv.innerHTML += "<br>Error update to DB";
+
+        console.error("Error update to DB");
+        return;
+      }
+      dataResponse.push(jobDone);
+
+      await sleep(TIME_SLEEP);
+    }
+
+    divDone.innerHTML += "<br>Created success!";
+
+    console.log("dataResponse: ", dataResponse);
+    return;
+  } 
+}
+
+async function tryUpdateToDB(e, t) { let a = MAX_RETRIES_UPDATE_DB; for (; a > 0;)try { let r = await updateToDB(e.adsenseId, t); return console.info("Update successful", t), r } catch (d) { console.error("Update failed. Retrying..."), --a > 0 && await sleep(TIME_SLEEP_UPDATE_DB) } console.error("Max retries exceeded. Update failed.", t) }
+
+async function updateToDB(pubId, opts = {}) {
+
+  let obj = {
+    "name": opts.name,
+    "pub_id": pubId,
+    "type": STYLE_TYPE,
+    "related_search_id": Number(opts.relatedSearchId),
+    "search_page_id": Number(opts.searchPageId),
+    "shopping_style_id": Number(opts.shoppingStyleId),
+    "status": "ok",
+    "style_id": Number(opts.styleId),
+  }
+
+  if (STYLE_TYPE != "") obj.type = STYLE_TYPE;
+
+  let headers = {"content-type": "application/json"};
+  headers[HNAME] = HVALUE;
+
+  var settings = {
+    "url": HLINK,
+    "method": "POST",
+    "timeout": 0,
+    "headers": headers,
+    "data": JSON.stringify(obj),
+  };
+
+  return await $.ajax(settings)
+}
+
+async function updateOneStyleById(info, id) {
+  if (!id) {
+    console.error("updateOneStyleById: Missing id");
+    return;
+  }
+
+  if (!list) {
+    list = await fetchListStyle(info);
+    list = handleResponse(list);
+
+    console.info("list style in this adsense:", list);
+  }
+
+  for (let index = 0; index < list["1"].length; index++) {
+    const element = list["1"][index];
+
+    if (element["1"] == id) {
+
+      let newStyle = {
+        xsrfToken: info.xsrfToken,
+        adsenseId: info.adsenseId,
+      };
+      newStyle.styleId = element["1"];
+
+      let oldName = element["2"];
+      
+      if (NAME_STYLE){
+        newStyle.name = NAME_STYLE + (STYLE_TYPE ? ("_"+STYLE_TYPE) : "") + " - " + Date.now();
+      }else{
+        newStyle.name = oldName;
+      }
+
+      for (let i = 0; i < element["8"]["10"].length; i++) {
+        const e = element["8"]["10"][i];
+
+        switch (e["2"]["2"]) {
+          case "Shopping style":
+            newStyle.shoppingStyleId = e["2"]["1"];
+            break;
+          case "Related searches":
+            newStyle.relatedSearchId = e["2"]["1"];
+            break;
+          case "Search Page":
+            newStyle.searchPageId = e["2"]["1"];
+            break;
+        }
+      }
+
+      await doingUpdateOneById(newStyle, "search");
+      await doingUpdateOneById(newStyle, "relatedSearch");
+      await doingUpdateOneById(newStyle, "searchPage");
+
+      await doingUpdateOneById(newStyle, "condSearch");
+    }
+  }
+}
+
+async function doingOneJob(info, data) {
+  if (!data.name) {
+    console.error("Missing name");
+    return;
+  }
+
+  console.log("Doing job: ", data.name);
+
+  let newInfo = JSON.parse(JSON.stringify(info));
+  newInfo.name = data.name;
+
+  if (data.styleId) {
+    newInfo.styleId = data.styleId;
+    newInfo.shoppingStyleId = data.shoppingStyleId;
+  } else {
+    let responseCreateStep1 = await doingCreateNewStyle(newInfo);
+
+    if (responseCreateStep1.name != newInfo.name) {
+      console.error("Error creating style, name not match: " + newInfo.name + " - " + responseCreateStep1.name);
+      return
+    }
+
+    newInfo.styleId = responseCreateStep1.styleId;
+    newInfo.shoppingStyleId = responseCreateStep1.shoppingStyleId;
+
+    await sleep(TIME_SLEEP);
+  }
+
+  console.log("styleID: ", newInfo.styleId);
+  console.log("shoppingStyleId: ", newInfo.shoppingStyleId);
+
+  if (data.relatedSearchId) {
+    newInfo.relatedSearchId = data.relatedSearchId;
+  } else {
+    newInfo.relatedSearchId = await doingCreateRelatedSearch(newInfo);
+    await sleep(TIME_SLEEP);
+  }
+
+  console.log("relatedSearchId: ", newInfo.relatedSearchId);
+
+  if (data.searchPageId) {
+    newInfo.searchPageId = data.searchPageId;
+  } else {
+    newInfo.searchPageId = await doingCreateSearchPage(newInfo);
+
+    await sleep(TIME_SLEEP);
+  }
+
+  console.log("searchPageId: ", newInfo.searchPageId);
+
+  await sleep(TIME_SLEEP);
+
+  await doingUpdateOneById(newInfo, "search");
+  await doingUpdateOneById(newInfo, "relatedSearch");
+  await doingUpdateOneById(newInfo, "searchPage");
+
+  return {
+    name: newInfo.name, styleId: newInfo.styleId,
+    shoppingStyleId: newInfo.shoppingStyleId,
+    relatedSearchId: newInfo.relatedSearchId,
+    searchPageId: newInfo.searchPageId,
+  };
+}
+
+async function doingCreateNewStyle(info) {
+  let responseCreateStep1 = await createNewStyle(info);
+
+  responseCreateStep1 = handleResponse(responseCreateStep1);
+
+  return getStyleId(responseCreateStep1);
+}
+
+async function doingCreateRelatedSearch(info) {
+  let responseCreateStep2 = await createNewRelatedSearch(info);
+
+  responseCreateStep2 = handleResponse(responseCreateStep2);
+
+  return getRelatedSearchId(responseCreateStep2);
+}
+
+function getRelatedSearchId(response) {
+  return response["1"]["1"];
+}
+
+async function doingCreateSearchPage(info) {
+  let responseCreateStep3 = await createNewSearchPageInRelatedSearch(info);
+  responseCreateStep3 = handleResponse(responseCreateStep3);
+  return getSearchPageId(responseCreateStep3);
+}
+
+function getSearchPageId(response) {
+  return response["1"]["1"];
+}
+
+function handleResponse(response) {
+  try {
+    response = response.replace(")]}'\n", "").replace(")\n]\n}'\n\n", "");
+
+    response = JSON.parse(response);
+    return response;
+
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function getStyleId(response) {
+  if (!response["1"]) {
+
+    if (response["2"] && JSON.stringify(response["2"]) == '{"1":1}') {
+      console.error("Can not create style, duplicate name");
+      return
+    }
+
+    console.error("Error getting style id");
+    return;
+  }
+
+  return { name: response["1"]["4"], styleId: response["1"]["1"], shoppingStyleId: response["3"]["1"] };
+}
+
+function getGoogleInfo() {
+  try {
+    let app_state = window.__asfe_app_state;
+
+    let appInfo = JSON.parse(app_state);
+
+    return { err: null, xsrfToken: appInfo["6"] };
+
+  } catch (error) {
+    return { err: "Error parsing app_state" };
+  }
+}
+
+
+async function fetchListStyle(opts = {}) {
+  if (!opts.adsenseId || !opts.xsrfToken) {
+    console.error("Missing info");
+    return
+  }
+
+  var settings = {
+    "url": "https://www.google.com/adsense/service/myads/GetSearchAdStyles?pid=pub-" + opts.adsenseId + "&authuser=0&tpid=pub-" + opts.adsenseId + "&ov=3&hl=en_US&rpcTrackingId=%2Fadsense%2Fservice%2Fmyads%2FGetSearchAdStyles%3Fpid%3Dpub-" + opts.adsenseId + "%26authuser%3D0%26tpid%3Dpub-" + opts.adsenseId + "%26ov%3D3%26hl%3Den_US%3A1",
+    "method": "POST",
+    "timeout": 0,
+    "headers": {
+      "activitylabels": "",
+      "activityname": "Initial Load",
+      "activitytrackingid": "myads",
+      "content-type": "application/json;charset=UTF-8",
+      "x-framework-xsrf-token": opts.xsrfToken
+    },
+    "data": "{}",
+  };
+
+  let res;
+  try { await $.ajax(settings) } catch (error) { res = error.responseText; }
+  return res;
+}
+
+//Step 1
+async function createNewStyle(opts = {}) {
+  if (!opts || !opts.adsenseId || !opts.xsrfToken || !opts.name) {
+    console.error("Missing info");
+    return
+  }
+
+  let obj = {
+    "1": {
+      "2": "5125181186",
+      "4": opts.name,
+      "7": [
+        {
+          "1": "Global Options",
+          "2": [
+            {
+              "2": {
+                "2": {
+                  "1": {
+                    "1": "50",
+                    "2": 1
+                  },
+                  "2": {
+                    "1": "4",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "50",
+                    "2": 1
+                  }
+                },
+                "3": "#ffffff",
+                "4": "#000000",
+                "5": {
+                  "1": "14",
+                  "2": 1
+                },
+                "21": {
+                  "1": "20",
+                  "2": 1
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 3
+                },
+                {
+                  "1": 6
+                },
+                {
+                  "1": 7
+                },
+                {
+                  "1": 5
+                }
+              ],
+              "5": 101,
+              "6": "si101"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Left container",
+          "2": [
+            {
+              "2": {
+                "1": {
+                  "2": {
+                    "1": "0",
+                    "2": 1
+                  }
+                },
+                "2": {
+                  "1": {
+                    "1": "0",
+                    "2": 1
+                  },
+                  "2": {
+                    "1": "0",
+                    "2": 1
+                  },
+                  "4": {
+                    "1": "0",
+                    "2": 1
+                  }
+                },
+                "11": {
+                  "1": "0",
+                  "2": 1
+                },
+                "13": {
+                  "1": "200",
+                  "2": 1
+                },
+                "14": {
+                  "1": "0",
+                  "2": 1
+                },
+                "24": 2,
+                "25": 1
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 6
+                },
+                {
+                  "1": 7
+                },
+                {
+                  "1": 8
+                },
+                {
+                  "1": 3
+                },
+                {
+                  "1": 9
+                }
+              ],
+              "5": 108,
+              "6": "si108"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Headline",
+          "2": [
+            {
+              "2": {
+                "2": {
+                  "1": {
+                    "1": "15",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "22",
+                    "2": 1
+                  }
+                },
+                "3": "#ffffff",
+                "5": {
+                  "1": "16",
+                  "2": 1
+                },
+                "7": 2,
+                "9": 1,
+                "11": {
+                  "1": "100",
+                  "2": 2
+                },
+                "21": {
+                  "1": "48",
+                  "2": 1
+                }
+              },
+              "3": {
+                "9": 1
+              },
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 5
+                },
+                {
+                  "1": 6
+                }
+              ],
+              "5": 27,
+              "6": "si27"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Display URL",
+          "2": [
+            {
+              "2": {
+                "3": "#999999",
+                "5": {
+                  "1": "10",
+                  "2": 1
+                },
+                "21": {
+                  "1": "11",
+                  "2": 1
+                },
+                "22": "1",
+                "29": 1
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 5
+                },
+                {
+                  "1": 6
+                }
+              ],
+              "5": 28,
+              "6": "si28"
+            }
+          ],
+          "5": true
+        },
+        {
+          "1": "Description",
+          "2": [
+            {
+              "2": {
+                "3": "#999999",
+                "5": {
+                  "1": "10",
+                  "2": 1
+                },
+                "21": {
+                  "1": "15",
+                  "2": 1
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 6
+                }
+              ],
+              "5": 29,
+              "6": "si29"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Unit Container",
+          "2": [
+            {
+              "2": {},
+              "3": {},
+              "4": [
+                {
+                  "1": 3
+                },
+                {
+                  "1": 7
+                }
+              ],
+              "5": 135,
+              "6": "si135"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Search Keyword",
+          "2": [
+            {
+              "2": {
+                "7": 3,
+                "9": 4
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 11,
+                  "2": "Text color"
+                },
+                {
+                  "1": 13
+                }
+              ],
+              "5": 130,
+              "6": "si130"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Ad Separator",
+          "2": [
+            {
+              "2": {
+                "11": {
+                  "1": "100",
+                  "2": 2
+                },
+                "14": {
+                  "1": "1",
+                  "2": 1
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 3,
+                  "2": "Separator color"
+                },
+                {
+                  "1": 19
+                }
+              ],
+              "5": 128,
+              "6": "si128"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Image",
+          "2": [
+            {
+              "2": {
+                "3": "#4caf50",
+                "11": {
+                  "1": "30",
+                  "2": 1
+                },
+                "14": {
+                  "1": "30",
+                  "2": 1
+                },
+                "17": {
+                  "2": {
+                    "1": "0",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  }
+                },
+                "18": {
+                  "2": {
+                    "1": "0",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  }
+                },
+                "19": {
+                  "2": {
+                    "1": "0",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  }
+                },
+                "20": {
+                  "2": {
+                    "1": "0",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  }
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 12
+                },
+                {
+                  "1": 9
+                },
+                {
+                  "1": 7
+                },
+                {
+                  "1": 11,
+                  "2": "Icon color"
+                }
+              ],
+              "5": 102,
+              "6": "si102",
+              "7": {
+                "1": "https://afs.googleusercontent.com/ad_icons/standard/publisher_icon_image/where_to_vote.svg"
+              }
+            },
+            {
+              "2": {
+                "17": {
+                  "3": {
+                    "1": "2",
+                    "2": 1
+                  }
+                },
+                "18": {
+                  "3": {
+                    "1": "2",
+                    "2": 1
+                  }
+                },
+                "19": {
+                  "3": {
+                    "1": "2",
+                    "2": 1
+                  }
+                },
+                "20": {
+                  "3": {
+                    "1": "2",
+                    "2": 1
+                  }
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 8
+                }
+              ],
+              "5": 69,
+              "6": "si69"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Ad Badge",
+          "2": [
+            {
+              "2": {
+                "3": "#999999",
+                "5": {
+                  "1": "10",
+                  "2": 1
+                },
+                "7": 3,
+                "17": {
+                  "1": "#999999"
+                },
+                "18": {
+                  "1": "#999999"
+                },
+                "19": {
+                  "1": "#999999"
+                },
+                "20": {
+                  "1": "#999999"
+                },
+                "21": {
+                  "1": "11",
+                  "2": 1
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 3
+                },
+                {
+                  "1": 6
+                }
+              ],
+              "5": 25,
+              "6": "si25"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Sitelink",
+          "2": [
+            {
+              "2": {
+                "3": "#ffffff",
+                "5": {
+                  "1": "15",
+                  "2": 1
+                },
+                "21": {
+                  "1": "22",
+                  "2": 1
+                }
+              },
+              "3": {
+                "9": 1
+              },
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 5
+                }
+              ],
+              "5": 15,
+              "6": "si15"
+            },
+            {
+              "2": {
+                "1": {
+                  "1": {
+                    "1": "1",
+                    "2": 1
+                  },
+                  "4": {
+                    "1": "0",
+                    "2": 1
+                  }
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 6
+                }
+              ],
+              "5": 14,
+              "6": "si14"
+            }
+          ],
+          "4": true,
+          "5": false
+        },
+        {
+          "1": "Enhanced Sitelinks",
+          "2": [
+            {
+              "2": {
+                "2": {
+                  "1": {
+                    "1": "6",
+                    "2": 1
+                  },
+                  "2": {
+                    "1": "20",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "4",
+                    "2": 1
+                  },
+                  "4": {
+                    "1": "20",
+                    "2": 1
+                  }
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 6
+                }
+              ],
+              "5": 70,
+              "6": "si70"
+            },
+            {
+              "2": {
+                "3": "#ffffff",
+                "5": {
+                  "1": "18",
+                  "2": 1
+                },
+                "21": {
+                  "1": "24",
+                  "2": 1
+                }
+              },
+              "3": {
+                "9": 1
+              },
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 5
+                }
+              ],
+              "5": 71,
+              "6": "si71"
+            },
+            {
+              "2": {},
+              "3": {},
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                }
+              ],
+              "5": 72,
+              "6": "si72"
+            }
+          ],
+          "4": true,
+          "5": false
+        },
+        {
+          "1": "Rating",
+          "2": [
+            {
+              "2": {
+                "3": "#ffffff"
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                }
+              ],
+              "5": 3,
+              "6": "si3"
+            },
+            {
+              "2": {
+                "3": "#70757a"
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 6
+                }
+              ],
+              "5": 1,
+              "6": "si1"
+            }
+          ],
+          "4": true,
+          "5": false
+        },
+        {
+          "1": "Price and Promotion",
+          "2": [
+            {
+              "2": {},
+              "3": {},
+              "4": [
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 6
+                }
+              ],
+              "5": 17,
+              "6": "si17"
+            },
+            {
+              "2": {
+                "3": "#ffffff"
+              },
+              "3": {
+                "9": 1
+              },
+              "4": [
+                {
+                  "1": 11,
+                  "2": "Link color"
+                }
+              ],
+              "5": 18,
+              "6": "si18"
+            },
+            {
+              "2": {
+                "3": "#ffffff"
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 11,
+                  "2": "Text color"
+                }
+              ],
+              "5": 137,
+              "6": "si137"
+            },
+            {
+              "2": {
+                "3": "#ffffff"
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 11,
+                  "2": "Description color"
+                }
+              ],
+              "5": 19,
+              "6": "si19"
+            }
+          ],
+          "4": true,
+          "5": false
+        },
+        {
+          "1": "Location",
+          "2": [
+            {
+              "2": {
+                "3": "#ffffff"
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 6
+                }
+              ],
+              "5": 11,
+              "6": "si11"
+            }
+          ],
+          "4": true,
+          "5": false
+        },
+        {
+          "1": "Phone Number",
+          "2": [
+            {
+              "2": {
+                "3": "#ffffff"
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 6
+                }
+              ],
+              "5": 20,
+              "6": "si20"
+            }
+          ],
+          "3": 3,
+          "4": true,
+          "5": false
+        },
+        {
+          "1": "Call to Action",
+          "2": [
+            {
+              "2": {
+                "1": {
+                  "1": {
+                    "1": "30",
+                    "2": 1
+                  },
+                  "2": {
+                    "1": "20",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "10",
+                    "2": 1
+                  },
+                  "4": {
+                    "1": "20",
+                    "2": 1
+                  }
+                },
+                "2": {
+                  "1": {
+                    "1": "50",
+                    "2": 1
+                  },
+                  "2": {
+                    "1": "50",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "50",
+                    "2": 1
+                  },
+                  "4": {
+                    "1": "50",
+                    "2": 1
+                  }
+                },
+                "4": "#e31c4e",
+                "16": {
+                  "1": "55",
+                  "2": 1
+                },
+                "17": {
+                  "1": "#ffffff",
+                  "2": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "20",
+                    "2": 1
+                  }
+                },
+                "18": {
+                  "1": "#ffffff",
+                  "2": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "20",
+                    "2": 1
+                  }
+                },
+                "19": {
+                  "1": "#ffffff",
+                  "2": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "20",
+                    "2": 1
+                  }
+                },
+                "20": {
+                  "1": "#ffffff",
+                  "2": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "20",
+                    "2": 1
+                  }
+                }
+              },
+              "3": {
+                "4": "#fe0c3d"
+              },
+              "4": [
+                {
+                  "1": 3
+                },
+                {
+                  "1": 7
+                },
+                {
+                  "1": 8
+                },
+                {
+                  "1": 6
+                },
+                {
+                  "1": 5
+                }
+              ],
+              "5": 21,
+              "6": "si21"
+            },
+            {
+              "2": {
+                "2": {
+                  "1": {
+                    "1": "3",
+                    "2": 1
+                  },
+                  "2": {
+                    "1": "3",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "3",
+                    "2": 1
+                  },
+                  "4": {
+                    "1": "3",
+                    "2": 1
+                  }
+                },
+                "3": "#ffffff",
+                "5": {
+                  "1": "18",
+                  "2": 1
+                },
+                "6": "Helvetica",
+                "7": 3,
+                "21": {
+                  "1": "22",
+                  "2": 1
+                }
+              },
+              "3": {
+                "4": "#fe0c3d",
+                "9": 1
+              },
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 5
+                }
+              ],
+              "5": 22,
+              "6": "si22",
+              "7": {
+                "1": "&#10148; Visit Website"
+              }
+            }
+          ],
+          "4": true,
+          "5": false
+        },
+        {
+          "1": "Ad Disclosure",
+          "2": [
+            {
+              "2": {
+                "3": "#999999",
+                "7": 2
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 6
+                }
+              ],
+              "5": 26,
+              "6": "si26"
+            }
+          ],
+          "4": true,
+          "5": false
+        }
+      ],
+      "8": 1,
+      "9": {
+        "10": [
+          {
+            "2": {
+              "1": "",
+              "2": "Shopping style",
+              "3": "{\"t\": {\"at\":2,\"l\":{\"nt\":0,\"lr\":{\"o\":1,\"a\":9,\"ap\":true},\"ch\":[{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0},\"ch\":[{\"nt\":2,\"dbk\":\"i\",\"sk\":\"si66\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":9}],\"acc\":{\"alt\":\"ialt\"},\"nodeSelector\":66}],\"sk\":\"si47\"}],\"sk\":\"si33\"},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0},\"ch\":[{\"nt\":1,\"dbk\":\"t\",\"lr\":{\"t\":0,\"nl\":2},\"sk\":\"si65\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":0}],\"nodeSelector\":65},{\"nt\":0,\"dbk\":\"wta.u\",\"lr\":{\"o\":0,\"a\":7,\"sb\":3},\"ch\":[{\"nt\":2,\"dbk\":\".wib\",\"sk\":\"si149\",\"ac\":[{\"act\":3,\"et\":0,\"en\":{\"nt\":0,\"ch\":[{\"nt\":1,\"dbk\":\"wta.t\",\"lr\":{\"nl\":1},\"ac\":[{\"act\":0,\"dbk\":\"wta.u\",\"et\":0,\"nm\":true}],\"pb\":{\"tr\":1,\"pbt\":\"wtac\"}}],\"sk\":\"wtaBubble\"}}],\"nodeSelector\":149}]}],\"sk\":\"si48\"},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":0,\"dbk\":\"pi\",\"lr\":{\"o\":1},\"ch\":[{\"nt\":0,\"dbk\":\"pi\",\"ch\":[{\"nt\":1,\"dbk\":\"pi.dp\"},{\"nt\":1,\"dbk\":\"pi.fp\"}],\"sk\":\"si136\",\"nodeSelector\":136},{\"nt\":0,\"dbk\":\"pi\",\"lr\":{\"o\":1,\"ov\":2},\"ch\":[{\"nt\":0,\"dbk\":\"pi.ip\",\"lr\":{\"o\":0,\"ov\":2},\"ch\":[{\"nt\":1,\"dbk\":\"pi.ip\",\"sk\":\"si122\",\"nodeSelector\":122}]},{\"nt\":1,\"dbk\":\"pi.id\",\"sk\":\"si121\",\"nodeSelector\":121},{\"nt\":1,\"dbk\":\"pi.ppu\",\"sk\":\"si58\",\"nodeSelector\":58},{\"nt\":1,\"dbk\":\"pi.s\",\"sk\":\"si57\",\"nodeSelector\":57}],\"sk\":\"si53\",\"nodeSelector\":53}],\"sk\":\"si61\",\"nodeSelector\":61},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":1,\"dbk\":\"cd\",\"sk\":\"si127\",\"nodeSelector\":127},{\"nt\":0,\"dbk\":\"rsf\",\"lr\":{\"o\":0,\"a\":6},\"ch\":[{\"nt\":4,\"dbk\":\"rsf\",\"sk\":\"si131\",\"acc\":{\"alt\":\"sr.sat\"},\"nodeSelector\":131},{\"nt\":1,\"dbk\":\"nr\",\"sk\":\"si146\",\"nodeSelector\":146}],\"sk\":\"si52\",\"nodeSelector\":52},{\"nt\":0,\"ch\":[{\"nt\":1,\"dbk\":\"er\"},{\"nt\":0,\"dbk\":\"eru\",\"lr\":{\"o\":0,\"a\":7},\"ch\":[{\"nt\":1,\"dbk\":\".eril\"},{\"nt\":2,\"dbk\":\"eru\",\"sk\":\"eri\",\"acc\":{\"alt\":\"era\"}}]}],\"sk\":\"si59\",\"nodeSelector\":59},{\"nt\":0,\"dbk\":\"li\",\"lr\":{\"o\":0},\"ch\":[{\"nt\":2,\"dbk\":\".ri104\",\"sk\":\"si104\",\"nodeSelector\":104,\"generateResourceDataBindingKey\":true},{\"nt\":1,\"dbk\":\"li.ld\",\"sk\":\"si56\",\"nodeSelector\":56}],\"sk\":\"si54\",\"nodeSelector\":54}]},{\"nt\":0,\"lr\":{\"o\":0,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":6},\"ch\":[{\"nt\":1,\"dbk\":\"m\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si60\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":1}],\"nodeSelector\":60}],\"sk\":\"si46\"},{\"nt\":0,\"dbk\":\".t\",\"lr\":{\"o\":0,\"sb\":3},\"ch\":[{\"nt\":1,\"dbk\":\".t\",\"sk\":\"si25\",\"nodeSelector\":25}],\"sk\":\"adbadgeContainer\"}],\"sk\":\"si41\"}],\"sk\":\"si36\"}],\"sk\":\"si35\"}],\"sk\":\"si32\"}],\"sk\":\"si101\"},\"s\":[{\"sk\":\"si101\",\"r\":{\"fs\":\"14\",\"bac\":\"#ffffff\",\"tc\":\"#70757A\",\"ff\":\"arial\",\"boc\":\"#E5E5E5\",\"w\":\"144\",\"fw\":2,\"br\":16,\"bw\":1,\"minh\":248,\"minw\":144,\"lh\":20,\"ml\":8,\"mt\":8}},{\"sk\":\"si47\",\"r\":{\"w\":\"100%\"}},{\"sk\":\"si35\",\"r\":{\"w\":\"100%\",\"pb\":12,\"pl\":8,\"pr\":8,\"pt\":12}},{\"sk\":\"si36\",\"r\":{\"pb\":20}},{\"sk\":\"si39\",\"r\":{\"fs\":\"14\",\"tc\":\"#70757A\"}},{\"sk\":\"si41\",\"r\":{\"w\":\"100%\",\"po\":{\"b\":\"0\"},\"pb\":12,\"pr\":16}},{\"sk\":\"si46\",\"r\":{\"w\":\"100%\"}},{\"sk\":\"si25\",\"r\":{\"fs\":\"14\",\"tc\":\"#4D5156\",\"boc\":\"#000000\",\"fw\":3,\"br\":2,\"bw\":0,\"lh\":20,\"ml\":8,\"pl\":0,\"pr\":0},\"styleSelector\":25},{\"sk\":\"si52\",\"r\":{\"fs\":\"14\",\"tc\":\"#70757A\"}},{\"sk\":\"si53\",\"r\":{\"fs\":\"14\",\"tc\":\"#70757A\",\"fw\":2}},{\"sk\":\"si59\",\"r\":{\"tc\":\"#70757A\"}},{\"sk\":\"si60\",\"r\":{\"fs\":\"14\",\"tc\":\"#4D5156\",\"lh\":20}},{\"sk\":\"si61\",\"r\":{\"fs\":\"14\",\"tc\":\"#4D5156\",\"fw\":3,\"lh\":20}},{\"sk\":\"si65\",\"r\":{\"fs\":\"16\",\"tc\":\"#1A0DAB\",\"w\":\"100%\",\"minw\":110,\"lh\":20}},{\"sk\":\"si66\",\"r\":{\"w\":\"144\",\"h\":\"144\",\"minh\":70,\"minw\":70},\"styleSelector\":66},{\"sk\":\"si149\",\"r\":{\"w\":\"21\",\"h\":\"18\",\"sfc\":\"#4D5156\",\"ml\":-3,\"pl\":0},\"styleSelector\":149},{\"sk\":\"wtaBubble\",\"r\":{\"fs\":\"12\",\"bac\":\"#ffffff\",\"tc\":\"#666666\",\"ff\":\"sans-serif\",\"boc\":\"#dddddd\",\"fw\":2,\"bw\":1,\"lh\":12,\"pb\":5,\"pl\":5,\"pr\":5,\"pt\":5}},{\"sk\":\"adbadgeContainer\",\"r\":{\"mr\":3}},{\"sk\":\"eri\",\"r\":{\"w\":\"37\",\"h\":\"20\"}}]}, \"r\": {\"eril\":\"Energy: \"}, \"act\": {\"at\":2,\"l\":{\"nt\":0,\"dbk\":\"adBlock\",\"lr\":{\"o\":0,\"a\":9,\"ov\":2},\"sk\":\"si135\"}}}"
+            },
+            "4": 2
+          }
+        ]
+      },
+      "10": 1,
+      "11": [
+        1,
+        2,
+        4,
+        5
+      ],
+      "12": {
+        "1": true
+      }
+    },
+    "2": {
+      "2": "5630811681",
+      "4": "Shopping style",
+      "8": 2,
+      "9": {
+        "9": {
+          "2": {
+            "1": "",
+            "2": "",
+            "3": ""
+          },
+          "4": 2
+        }
+      },
+      "10": 1,
+      "12": {
+        "1": true
+      }
+    },
+  }
+
+  var settings = {
+    "url": "https://www.google.com/adsense/service/myads/SaveSearchAdStyle?pid=pub-" + opts.adsenseId + "&authuser=0&tpid=pub-" + opts.adsenseId + "&ov=3&hl=en_US&rpcTrackingId=%2Fadsense%2Fservice%2Fmyads%2FSaveSearchAdStyle%3Fpid%3Dpub-" + opts.adsenseId + "%26authuser%3D0%26tpid%3Dpub-" + opts.adsenseId + "%26ov%3D3%26hl%3Den_US%3A1",
+    "method": "POST",
+    "timeout": 0,
+    "headers": {
+      "activitylabels": "",
+      "activityname": "myAdsSearchSaveAdStyle",
+      "activitytrackingid": "myads",
+      "content-type": "application/json;charset=UTF-8",
+      "x-framework-xsrf-token": opts.xsrfToken
+    },
+    "data": JSON.stringify(obj),
+  };
+
+  let res;
+  try { await $.ajax(settings) } catch (error) { res = error.responseText; }
+  return res;
+}
+
+//Step 2
+async function createNewRelatedSearch(opts = {}) {
+  if (!opts || !opts.adsenseId || !opts.xsrfToken || !opts.name || !opts.styleId) {
+    console.error("Missing info");
+    return
+  }
+
+  let obj = {
+    "1": {
+      "2": "7555691984",
+      "4": "Related searches",
+      "7": [
+        {
+          "1": "Link Container",
+          "2": [
+            {
+              "2": {
+                "1": {
+                  "1": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "2": {
+                    "1": "0",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "4": {
+                    "1": "0",
+                    "2": 1
+                  }
+                },
+                "2": {
+                  "1": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "2": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "4": {
+                    "1": "5",
+                    "2": 1
+                  }
+                },
+                "3": "#ffffff",
+                "4": "#e31c4e",
+                "5": {
+                  "1": "20",
+                  "2": 1
+                },
+                "7": 3,
+                "11": {
+                  "1": "100",
+                  "2": 2
+                },
+                "17": {
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  }
+                },
+                "18": {
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  }
+                },
+                "19": {
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  }
+                },
+                "20": {
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  }
+                },
+                "21": {
+                  "1": "48",
+                  "2": 1
+                },
+                "24": 1,
+                "25": 2
+              },
+              "3": {
+                "4": "#fe2c55",
+                "9": 1
+              },
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 3
+                },
+                {
+                  "1": 6
+                },
+                {
+                  "1": 8
+                },
+                {
+                  "1": 7
+                },
+                {
+                  "1": 5
+                }
+              ],
+              "5": 144,
+              "6": "si144"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Unit Container",
+          "2": [
+            {
+              "2": {
+                "4": "#000000",
+                "14": {
+                  "1": "100",
+                  "2": 2
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 3
+                },
+                {
+                  "1": 7
+                }
+              ],
+              "5": 135,
+              "6": "si135"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Unit Title",
+          "2": [
+            {
+              "2": {
+                "1": {
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "4": {
+                    "1": "0",
+                    "2": 1
+                  }
+                },
+                "3": "#999999",
+                "4": "#000000",
+                "5": {
+                  "1": "12",
+                  "2": 1
+                },
+                "6": "Verdana",
+                "17": {
+                  "3": {
+                    "1": "2",
+                    "2": 1
+                  }
+                },
+                "18": {
+                  "3": {
+                    "1": "2",
+                    "2": 1
+                  }
+                },
+                "19": {
+                  "3": {
+                    "1": "2",
+                    "2": 1
+                  }
+                },
+                "20": {
+                  "3": {
+                    "1": "2",
+                    "2": 1
+                  }
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 15
+                },
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 6
+                },
+                {
+                  "1": 8
+                },
+                {
+                  "1": 3
+                },
+                {
+                  "1": 5
+                }
+              ],
+              "5": 133,
+              "6": "si133",
+              "7": {
+                "2": 2
+              }
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Ad Separator",
+          "2": [
+            {
+              "2": {
+                "11": {
+                  "1": "100",
+                  "2": 2
+                },
+                "14": {
+                  "1": "1",
+                  "2": 1
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 3,
+                  "2": "Separator color"
+                },
+                {
+                  "1": 19
+                }
+              ],
+              "5": 128,
+              "6": "si128"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Image",
+          "2": [
+            {
+              "2": {
+                "3": "#ffffff",
+                "11": {
+                  "1": "24",
+                  "2": 1
+                },
+                "14": {
+                  "1": "24",
+                  "2": 1
+                },
+                "17": {
+                  "3": {
+                    "1": "15",
+                    "2": 1
+                  }
+                },
+                "18": {
+                  "3": {
+                    "1": "15",
+                    "2": 1
+                  }
+                },
+                "19": {
+                  "3": {
+                    "1": "15",
+                    "2": 1
+                  }
+                },
+                "20": {
+                  "3": {
+                    "1": "15",
+                    "2": 1
+                  }
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 12
+                },
+                {
+                  "1": 9
+                },
+                {
+                  "1": 7
+                },
+                {
+                  "1": 11,
+                  "2": "Icon color"
+                }
+              ],
+              "5": 102,
+              "6": "si102",
+              "7": {
+                "1": "https://afs.googleusercontent.com/ad_icons/standard/publisher_icon_image/chevron.svg"
+              }
+            },
+            {
+              "2": {},
+              "3": {},
+              "4": [
+                {
+                  "1": 8
+                }
+              ],
+              "5": 69,
+              "6": "si69"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Secondary Image",
+          "2": [
+            {
+              "2": {
+                "3": "#ffffff",
+                "11": {
+                  "1": "24",
+                  "2": 1
+                },
+                "14": {
+                  "1": "24",
+                  "2": 1
+                },
+                "17": {
+                  "3": {
+                    "1": "12",
+                    "2": 1
+                  }
+                },
+                "18": {
+                  "3": {
+                    "1": "12",
+                    "2": 1
+                  }
+                },
+                "19": {
+                  "3": {
+                    "1": "12",
+                    "2": 1
+                  }
+                },
+                "20": {
+                  "3": {
+                    "1": "12",
+                    "2": 1
+                  }
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 12
+                },
+                {
+                  "1": 9
+                },
+                {
+                  "1": 8
+                },
+                {
+                  "1": 7
+                },
+                {
+                  "1": 11,
+                  "2": "Icon color"
+                }
+              ],
+              "5": 143,
+              "6": "si143",
+              "7": {
+                "1": "https://afs.googleusercontent.com/ad_icons/standard/publisher_icon_image/chevron.svg"
+              }
+            }
+          ],
+          "5": false
+        }
+      ],
+      "8": 4,
+      "9": {
+        "9": {
+          "2": {
+            "1": opts.styleId,
+            "2": "",
+            "3": ""
+          },
+          "4": 4
+        }
+      },
+      "10": 1,
+      "11": [
+        1,
+        2,
+        4,
+        5
+      ],
+      "12": {
+        "1": true
+      }
+    }
+  }
+
+  var settings = {
+    "url": "https://www.google.com/adsense/service/myads/SaveSearchAdStyle?pid=pub-" + opts.adsenseId + "&authuser=0&tpid=pub-" + opts.adsenseId + "&ov=3&hl=en_US&rpcTrackingId=%2Fadsense%2Fservice%2Fmyads%2FSaveSearchAdStyle%3Fpid%3Dpub-" + opts.adsenseId + "%26authuser%3D0%26tpid%3Dpub-" + opts.adsenseId + "%26ov%3D3%26hl%3Den_US%3A1",
+    "method": "POST",
+    "timeout": 0,
+    "headers": {
+      "activitylabels": "",
+      "activityname": "myAdsSearchSaveAdStyle",
+      "activitytrackingid": "myads",
+      "content-type": "application/json;charset=UTF-8",
+      "x-framework-xsrf-token": opts.xsrfToken
+    },
+    "data": JSON.stringify(obj),
+  };
+
+  let res;
+  try { await $.ajax(settings) } catch (error) { res = error.responseText; }
+  return res;
+}
+
+//Step 3
+async function createNewSearchPageInRelatedSearch(opts = {}) {
+  if (!opts || !opts.adsenseId || !opts.xsrfToken || !opts.name || !opts.styleId || !opts.shoppingStyleId) {
+    console.error("Missing info");
+    return
+  }
+
+  let obj = {
+    "1": {
+      "2": "7555691984",
+      "4": "Search Page",
+      "7": [
+        {
+          "1": "Link Container",
+          "2": [
+            {
+              "2": {
+                "1": {
+                  "1": {
+                    "1": "0",
+                    "2": 1
+                  },
+                  "2": {
+                    "1": "0",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "0",
+                    "2": 1
+                  },
+                  "4": {
+                    "1": "0",
+                    "2": 1
+                  }
+                },
+                "2": {
+                  "1": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "2": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "4": {
+                    "1": "0",
+                    "2": 1
+                  }
+                },
+                "3": "#c6dafc",
+                "4": "#000000",
+                "5": {
+                  "1": "12",
+                  "2": 1
+                },
+                "6": "Verdana",
+                "7": 2,
+                "11": {
+                  "1": "100",
+                  "2": 2
+                },
+                "17": {
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  }
+                },
+                "18": {
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  }
+                },
+                "19": {
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  }
+                },
+                "20": {
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  }
+                },
+                "21": {
+                  "1": "25",
+                  "2": 1
+                },
+                "24": 1,
+                "25": 2
+              },
+              "3": {
+                "4": "#000000",
+                "9": 1
+              },
+              "4": [
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 3
+                },
+                {
+                  "1": 6
+                },
+                {
+                  "1": 8
+                },
+                {
+                  "1": 7
+                },
+                {
+                  "1": 5
+                }
+              ],
+              "5": 144,
+              "6": "si144"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Unit Container",
+          "2": [
+            {
+              "2": {
+                "4": "#000000",
+                "14": {
+                  "1": "100",
+                  "2": 2
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 3
+                },
+                {
+                  "1": 7
+                }
+              ],
+              "5": 135,
+              "6": "si135"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Unit Title",
+          "2": [
+            {
+              "2": {
+                "1": {
+                  "3": {
+                    "1": "5",
+                    "2": 1
+                  },
+                  "4": {
+                    "1": "10",
+                    "2": 1
+                  }
+                },
+                "3": "#999999",
+                "4": "#000000",
+                "5": {
+                  "1": "10",
+                  "2": 1
+                },
+                "6": "Verdana",
+                "17": {
+                  "3": {
+                    "1": "2",
+                    "2": 1
+                  }
+                },
+                "18": {
+                  "3": {
+                    "1": "2",
+                    "2": 1
+                  }
+                },
+                "19": {
+                  "3": {
+                    "1": "2",
+                    "2": 1
+                  }
+                },
+                "20": {
+                  "3": {
+                    "1": "2",
+                    "2": 1
+                  }
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 15
+                },
+                {
+                  "1": 1
+                },
+                {
+                  "1": 13
+                },
+                {
+                  "1": 2
+                },
+                {
+                  "1": 6
+                },
+                {
+                  "1": 8
+                },
+                {
+                  "1": 3
+                },
+                {
+                  "1": 5
+                }
+              ],
+              "5": 133,
+              "6": "si133",
+              "7": {
+                "2": 2
+              }
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Ad Separator",
+          "2": [
+            {
+              "2": {
+                "11": {
+                  "1": "100",
+                  "2": 2
+                },
+                "14": {
+                  "1": "1",
+                  "2": 1
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 3,
+                  "2": "Separator color"
+                },
+                {
+                  "1": 19
+                }
+              ],
+              "5": 128,
+              "6": "si128"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Image",
+          "2": [
+            {
+              "2": {
+                "3": "#000000",
+                "11": {
+                  "1": "0",
+                  "2": 1
+                },
+                "14": {
+                  "1": "0",
+                  "2": 1
+                },
+                "17": {
+                  "3": {
+                    "1": "15",
+                    "2": 1
+                  }
+                },
+                "18": {
+                  "3": {
+                    "1": "15",
+                    "2": 1
+                  }
+                },
+                "19": {
+                  "3": {
+                    "1": "15",
+                    "2": 1
+                  }
+                },
+                "20": {
+                  "3": {
+                    "1": "15",
+                    "2": 1
+                  }
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 12
+                },
+                {
+                  "1": 9
+                },
+                {
+                  "1": 7
+                },
+                {
+                  "1": 11,
+                  "2": "Icon color"
+                }
+              ],
+              "5": 102,
+              "6": "si102",
+              "7": {
+                "1": "https://afs.googleusercontent.com/ad_icons/standard/publisher_icon_image/chevron.svg"
+              }
+            },
+            {
+              "2": {},
+              "3": {},
+              "4": [
+                {
+                  "1": 8
+                }
+              ],
+              "5": 69,
+              "6": "si69"
+            }
+          ],
+          "5": false
+        },
+        {
+          "1": "Secondary Image",
+          "2": [
+            {
+              "2": {
+                "3": "#000000",
+                "11": {
+                  "1": "0",
+                  "2": 1
+                },
+                "14": {
+                  "1": "0",
+                  "2": 1
+                },
+                "17": {
+                  "3": {
+                    "1": "12",
+                    "2": 1
+                  }
+                },
+                "18": {
+                  "3": {
+                    "1": "12",
+                    "2": 1
+                  }
+                },
+                "19": {
+                  "3": {
+                    "1": "12",
+                    "2": 1
+                  }
+                },
+                "20": {
+                  "3": {
+                    "1": "12",
+                    "2": 1
+                  }
+                }
+              },
+              "3": {},
+              "4": [
+                {
+                  "1": 12
+                },
+                {
+                  "1": 9
+                },
+                {
+                  "1": 8
+                },
+                {
+                  "1": 7
+                },
+                {
+                  "1": 11,
+                  "2": "Icon color"
+                }
+              ],
+              "5": 143,
+              "6": "si143",
+              "7": {
+                "1": "https://afs.googleusercontent.com/ad_icons/standard/publisher_icon_image/chevron.svg"
+              }
+            }
+          ],
+          "5": false
+        }
+      ],
+      "8": 4,
+      "9": {
+        "9": {
+          "1": [
+            1,
+            3,
+            2
+          ],
+          "2": {
+            "1": opts.styleId,
+            "2": opts.name,
+            "3": "{\"t\": {\"at\":1,\"l\":{\"nt\":0,\"lr\":{\"o\":1},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":1,\"a\":6},\"ch\":[{\"nt\":0,\"dbk\":\"u\",\"lr\":{\"o\":1},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":7},\"ch\":[{\"nt\":0,\"ch\":[{\"nt\":2,\"dbk\":\".ri102\",\"sk\":\"si102\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":18}],\"hnk\":\"ctd.iu\",\"acc\":{\"ah\":true},\"nodeSelector\":102,\"generateResourceDataBindingKey\":true},{\"nt\":2,\"dbk\":\"ctd.iu\",\"sk\":\"si5\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":26}],\"acc\":{\"ah\":true},\"nodeSelector\":5}],\"hnk\":\"squareImage.iu\"},{\"nt\":2,\"dbk\":\"squareImage.iu\",\"sk\":\"si102\",\"ac\":[{\"act\":0,\"dbk\":\"squareImage.cu\",\"et\":0,\"nb\":9}],\"acc\":{\"ah\":true},\"nodeSelector\":102}],\"sk\":\"si69\",\"nodeSelector\":69}],\"sk\":\"si37\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":0}]}],\"sk\":\"si108\"},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0},\"ch\":[{\"nt\":1,\"dbk\":\"t\",\"sk\":\"si27\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":0}]},{\"nt\":0,\"lr\":{\"o\":0,\"sb\":3},\"ch\":[{\"nt\":2,\"dbk\":\".wim\",\"lr\":{\"sb\":3},\"sk\":\"si68\",\"ac\":[{\"act\":3,\"et\":0,\"en\":{\"nt\":0,\"ch\":[{\"nt\":1,\"dbk\":\"wta.t\",\"lr\":{\"nl\":1},\"ac\":[{\"act\":0,\"dbk\":\"wta.u\",\"et\":0,\"nm\":true}],\"pb\":{\"tr\":1,\"pbt\":\"wtac\"}}],\"sk\":\"wtaBubble\"}}],\"nodeSelector\":68}],\"sk\":\"si39\"}],\"sk\":\"si38\"},{\"nt\":0,\"lr\":{\"o\":0,\"a\":6,\"ov\":2},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":6,\"nl\":1},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"sb\":3},\"ch\":[{\"nt\":1,\"dbk\":\".tp\"},{\"nt\":1,\"dbk\":\".cd\",\"sk\":\"adBadgeBullet\"}],\"sk\":\"si25\",\"nodeSelector\":25},{\"nt\":1,\"dbk\":\"v\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si28\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":1}]},{\"nt\":0,\"dbk\":\"wta.u\",\"lr\":{\"o\":0,\"sb\":3},\"ch\":[{\"nt\":1,\"dbk\":\".wid\",\"sk\":\"si24\",\"ac\":[{\"act\":3,\"et\":0,\"en\":{\"nt\":0,\"ch\":[{\"nt\":1,\"dbk\":\"wta.t\",\"lr\":{\"nl\":1},\"sk\":\"wtaBubbleText\",\"ac\":[{\"act\":0,\"dbk\":\"wta.u\",\"et\":0,\"nm\":true}],\"pb\":{\"tr\":1,\"pbt\":\"wtac\"}}],\"sk\":\"wtaBubble\"}}],\"nodeSelector\":24}],\"sk\":\"si67\",\"nodeSelector\":67}],\"sk\":\"si41\"},{\"nt\":1,\"dbk\":\"pn\",\"sk\":\"si20\",\"nodeSelector\":20}],\"sk\":\"si34\"},{\"nt\":1,\"dbk\":\"d\",\"sk\":\"si29\"},{\"nt\":0,\"dbk\":\"sr\",\"lr\":{\"o\":0,\"a\":6},\"ch\":[{\"nt\":4,\"dbk\":\"sr.r\",\"sk\":\"si2\",\"acc\":{\"alt\":\"sr.sat\"},\"nodeSelector\":2},{\"nt\":0,\"lr\":{\"o\":0},\"ch\":[{\"nt\":0,\"ch\":[{\"nt\":1,\"dbk\":\"sr.ct\",\"lr\":{\"nl\":1},\"sk\":\"si3\",\"ac\":[{\"act\":0,\"dbk\":\"sr.u\",\"et\":0,\"nm\":true}],\"nodeSelector\":3}],\"sk\":\"srLink\"},{\"nt\":0,\"sk\":\"srSpaceChar\"},{\"nt\":1,\"dbk\":\"sr.wt\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si3\",\"nodeSelector\":3}]}],\"sk\":\"si1\",\"nodeSelector\":1},{\"nt\":1,\"dbk\":\"location\",\"sk\":\"si11\",\"nodeSelector\":11},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":0,\"dbk\":\"pd\",\"lr\":{\"o\":0},\"ch\":[{\"nt\":0,\"dbk\":\"pd.dl\",\"ch\":[{\"nt\":1,\"dbk\":\"pd.dl\"},{\"nt\":1,\"dbk\":\".cd\",\"sk\":\"pdcd\"}]},{\"nt\":1,\"dbk\":\"pd.t\",\"sk\":\"si26\",\"nodeSelector\":26},{\"nt\":1,\"dbk\":\"pd.cd\",\"sk\":\"si26\",\"nodeSelector\":26}]},{\"nt\":0,\"dbk\":\"pee\",\"lr\":{\"o\":0,\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\"pee.r.0.h\",\"lr\":{\"t\":1,\"sb\":3,\"nl\":1},\"sk\":\"si18\",\"ac\":[{\"act\":0,\"dbk\":\"pee.r.0.u\",\"et\":0,\"nb\":13}],\"nodeSelector\":18},{\"nt\":0,\"dbk\":\"pee.r.0.p\",\"lr\":{\"o\":0,\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\".da\",\"sk\":\"priceExtensionChipsExpandoPriceHyphen\"},{\"nt\":1,\"dbk\":\"pee.r.0.p\",\"lr\":{\"t\":1,\"sb\":3,\"nl\":1},\"sk\":\"priceExtensionChipsPrice\"}],\"sk\":\"si137\",\"nodeSelector\":137},{\"nt\":1,\"dbk\":\"pee.r.0.d\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si19\",\"nodeSelector\":19}],\"sk\":\"si17\",\"nodeSelector\":17},{\"nt\":0,\"dbk\":\"pe\",\"lr\":{\"o\":1,\"a\":0,\"t\":1},\"ch\":[{\"nt\":0,\"dbk\":\"pe.pm\",\"lr\":{\"o\":0,\"a\":3,\"t\":1},\"ch\":[{\"nt\":0,\"dbk\":\"pe.o\",\"lr\":{\"o\":0,\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\"pe.o\",\"lr\":{\"t\":1,\"sb\":3,\"nl\":1},\"sk\":\"promotionExtensionOccasion\"}],\"sk\":\"si137\",\"nodeSelector\":137},{\"nt\":0,\"dbk\":\"pe.pm\",\"lr\":{\"o\":0,\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\"pe.pm\",\"lr\":{\"t\":1,\"sb\":3,\"nl\":1},\"sk\":\"promotionExtensionLink\",\"ac\":[{\"act\":0,\"dbk\":\"pe.u\",\"et\":0,\"nb\":13}]}],\"sk\":\"si18\",\"nodeSelector\":18},{\"nt\":1,\"dbk\":\"pe.ad1l\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si19\",\"nodeSelector\":19}]},{\"nt\":0,\"dbk\":\"pe.ad2l\",\"lr\":{\"o\":0,\"a\":3,\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\"pe.ad2l\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si19\",\"nodeSelector\":19}]}],\"sk\":\"si17\",\"nodeSelector\":17},{\"nt\":0,\"dbk\":\"ctd.nr\",\"lr\":{\"a\":6},\"ch\":[{\"nt\":0,\"sk\":\"ctdRatingSpacer\"},{\"nt\":1,\"dbk\":\"ctd.r\",\"sk\":\"ctdRatingCount\"},{\"nt\":4,\"dbk\":\"ctd.r\",\"sk\":\"si7\",\"nodeSelector\":7},{\"nt\":1,\"dbk\":\".lp\",\"sk\":\"ctdRatingCount\"},{\"nt\":1,\"dbk\":\"ctd.nr\",\"sk\":\"ctdRatingCount\"},{\"nt\":1,\"dbk\":\".rp\",\"sk\":\"ctdRatingCount\"}]}]},{\"nt\":0,\"dbk\":\"sl2l\",\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":1,\"dbk\":\"sl2l.sls.0.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl2l.sls.0.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15},{\"nt\":1,\"dbk\":\"sl2l.sls.1.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl2l.sls.1.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}],\"sk\":\"si14\",\"nodeSelector\":14},{\"nt\":0,\"dbk\":\"sl3l\",\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":1,\"dbk\":\"sl3l.sls.0.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl3l.sls.0.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15},{\"nt\":1,\"dbk\":\"sl3l.sls.1.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl3l.sls.1.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15},{\"nt\":1,\"dbk\":\"sl3l.sls.2.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl3l.sls.2.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}],\"sk\":\"si14\",\"nodeSelector\":14},{\"nt\":0,\"dbk\":\"sl1l.sls.0.t\",\"lr\":{\"o\":0,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\"sl1l.sls.0.t\",\"lr\":{\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl1l.sls.0.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}]},{\"nt\":0,\"dbk\":\"sl1l.sls.1.t\",\"lr\":{\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\".cd\",\"sk\":\"si16\",\"nodeSelector\":16},{\"nt\":1,\"dbk\":\"sl1l.sls.1.t\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl1l.sls.1.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}]},{\"nt\":0,\"dbk\":\"sl1l.sls.2.t\",\"lr\":{\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\".cd\",\"sk\":\"si16\",\"nodeSelector\":16},{\"nt\":1,\"dbk\":\"sl1l.sls.2.t\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl1l.sls.2.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}]},{\"nt\":0,\"dbk\":\"sl1l.sls.3.t\",\"lr\":{\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\".cd\",\"sk\":\"si16\",\"nodeSelector\":16},{\"nt\":1,\"dbk\":\"sl1l.sls.3.t\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl1l.sls.3.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}]},{\"nt\":0,\"dbk\":\"sl1l.sls.4.t\",\"lr\":{\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\".cd\",\"sk\":\"si16\",\"nodeSelector\":16},{\"nt\":1,\"dbk\":\"sl1l.sls.4.t\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl1l.sls.4.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}]},{\"nt\":0,\"dbk\":\"sl1l.sls.5.t\",\"lr\":{\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\".cd\",\"sk\":\"si16\",\"nodeSelector\":16},{\"nt\":1,\"dbk\":\"sl1l.sls.5.t\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl1l.sls.5.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}]},{\"nt\":0,\"dbk\":\"sl1l.sls.6.t\",\"lr\":{\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\".cd\",\"sk\":\"si16\",\"nodeSelector\":16},{\"nt\":1,\"dbk\":\"sl1l.sls.6.t\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl1l.sls.6.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}]}],\"sk\":\"si14\",\"nodeSelector\":14},{\"nt\":0,\"dbk\":\"sl4l.sls.0.t\",\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":1,\"dbk\":\"sl4l.sls.0.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl4l.sls.0.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15},{\"nt\":1,\"dbk\":\"sl4l.sls.1.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl4l.sls.1.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15},{\"nt\":1,\"dbk\":\"sl4l.sls.2.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl4l.sls.2.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15},{\"nt\":1,\"dbk\":\"sl4l.sls.3.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl4l.sls.3.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}],\"sk\":\"si14\",\"nodeSelector\":14},{\"nt\":0,\"lr\":{\"o\":0,\"a\":3},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0},\"ch\":[{\"nt\":0,\"dbk\":\"sl2c3l\",\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":0},\"ch\":[{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":1,\"dbk\":\"sl2c3l.sls.0.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl2c3l.sls.0.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15},{\"nt\":1,\"dbk\":\"sl2c3l.sls.2.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl2c3l.sls.2.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15},{\"nt\":1,\"dbk\":\"sl2c3l.sls.4.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl2c3l.sls.4.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}],\"sk\":\"sitelinksLeftColumn\"},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":1,\"dbk\":\"sl2c3l.sls.1.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl2c3l.sls.1.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15},{\"nt\":1,\"dbk\":\"sl2c3l.sls.3.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl2c3l.sls.3.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15},{\"nt\":1,\"dbk\":\"sl2c3l.sls.5.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl2c3l.sls.5.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}],\"sk\":\"sitelinksRightColumn\"}],\"sk\":\"sitelinksTextContainer\"}],\"sk\":\"si14\",\"nodeSelector\":14},{\"nt\":0,\"dbk\":\"sl2c2l\",\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":0},\"ch\":[{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":1,\"dbk\":\"sl2c2l.sls.0.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl2c2l.sls.0.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15},{\"nt\":1,\"dbk\":\"sl2c2l.sls.2.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl2c2l.sls.2.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}],\"sk\":\"sitelinksLeftColumn\"},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":1,\"dbk\":\"sl2c2l.sls.1.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl2c2l.sls.1.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15},{\"nt\":1,\"dbk\":\"sl2c2l.sls.3.t\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si15\",\"ac\":[{\"act\":0,\"dbk\":\"sl2c2l.sls.3.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":15}],\"sk\":\"sitelinksRightColumn\"}],\"sk\":\"sitelinksTextContainer\"}],\"sk\":\"si14\",\"nodeSelector\":14}],\"sk\":\"si35\"}],\"sk\":\"si42\"},{\"nt\":0,\"dbk\":\"sl2e\",\"lr\":{\"o\":0},\"ch\":[{\"nt\":0,\"dbk\":\"sl2e.sls.0\",\"lr\":{\"o\":1,\"a\":9,\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\"sl2e.sls.0.t\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si71\",\"ac\":[{\"act\":0,\"dbk\":\"sl2e.sls.0.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":71},{\"nt\":1,\"dbk\":\"sl2e.sls.0.l2\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si72\",\"nodeSelector\":72},{\"nt\":1,\"dbk\":\"sl2e.sls.0.l3\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si72\",\"nodeSelector\":72}],\"sk\":\"si70\",\"nodeSelector\":70},{\"nt\":0,\"dbk\":\"sl2e.sls.1\",\"lr\":{\"o\":1,\"a\":9,\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\"sl2e.sls.1.t\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si71\",\"ac\":[{\"act\":0,\"dbk\":\"sl2e.sls.1.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":71},{\"nt\":1,\"dbk\":\"sl2e.sls.1.l2\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si72\",\"nodeSelector\":72},{\"nt\":1,\"dbk\":\"sl2e.sls.1.l3\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si72\",\"nodeSelector\":72}],\"sk\":\"si70\",\"nodeSelector\":70}],\"sk\":\"exp-sitelinks-container\"},{\"nt\":0,\"dbk\":\"sl4e\",\"lr\":{\"o\":0},\"ch\":[{\"nt\":0,\"lr\":{\"o\":1,\"a\":9,\"t\":1},\"ch\":[{\"nt\":0,\"dbk\":\"sl4e.sls.0\",\"lr\":{\"o\":1,\"a\":9,\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\"sl4e.sls.0.t\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si71\",\"ac\":[{\"act\":0,\"dbk\":\"sl4e.sls.0.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":71},{\"nt\":1,\"dbk\":\"sl4e.sls.0.l2\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si72\",\"nodeSelector\":72},{\"nt\":1,\"dbk\":\"sl4e.sls.0.l3\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si72\",\"nodeSelector\":72}],\"sk\":\"si70\",\"nodeSelector\":70},{\"nt\":0,\"dbk\":\"sl4e.sls.2\",\"lr\":{\"o\":1,\"a\":9,\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\"sl4e.sls.2.t\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si71\",\"ac\":[{\"act\":0,\"dbk\":\"sl4e.sls.2.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":71},{\"nt\":1,\"dbk\":\"sl4e.sls.2.l2\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si72\",\"nodeSelector\":72},{\"nt\":1,\"dbk\":\"sl4e.sls.2.l3\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si72\",\"nodeSelector\":72}],\"sk\":\"si70\",\"nodeSelector\":70}]},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9,\"t\":1},\"ch\":[{\"nt\":0,\"dbk\":\"sl4e.sls.1\",\"lr\":{\"o\":1,\"a\":9,\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\"sl4e.sls.1.t\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si71\",\"ac\":[{\"act\":0,\"dbk\":\"sl4e.sls.1.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":71},{\"nt\":1,\"dbk\":\"sl4e.sls.1.l2\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si72\",\"nodeSelector\":72},{\"nt\":1,\"dbk\":\"sl4e.sls.1.l3\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si72\",\"nodeSelector\":72}],\"sk\":\"si70\",\"nodeSelector\":70},{\"nt\":0,\"dbk\":\"sl4e.sls.3\",\"lr\":{\"o\":1,\"a\":9,\"t\":1},\"ch\":[{\"nt\":1,\"dbk\":\"sl4e.sls.3.t\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si71\",\"ac\":[{\"act\":0,\"dbk\":\"sl4e.sls.3.u\",\"et\":0,\"nb\":6}],\"nodeSelector\":71},{\"nt\":1,\"dbk\":\"sl4e.sls.3.l2\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si72\",\"nodeSelector\":72},{\"nt\":1,\"dbk\":\"sl4e.sls.3.l3\",\"lr\":{\"t\":1,\"nl\":1},\"sk\":\"si72\",\"nodeSelector\":72}],\"sk\":\"si70\",\"nodeSelector\":70}]}],\"sk\":\"exp-sitelinks-container\"},{\"nt\":0,\"ch\":[{\"nt\":0,\"dbk\":\"ctd.ps\",\"lr\":{\"o\":0,\"a\":7},\"ch\":[{\"nt\":1,\"dbk\":\"ctd.ps\",\"sk\":\"si22\",\"nodeSelector\":22}],\"sk\":\"si21\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":27}],\"nodeSelector\":21},{\"nt\":0,\"dbk\":\"ctc.bt\",\"lr\":{\"o\":0,\"a\":7},\"ch\":[{\"nt\":1,\"dbk\":\"ctc.bt\",\"sk\":\"si22\",\"nodeSelector\":22}],\"sk\":\"si21\",\"ac\":[{\"act\":0,\"dbk\":\"ctc.u\",\"et\":0,\"nb\":14}],\"nodeSelector\":21},{\"nt\":0,\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":7},\"ch\":[{\"nt\":2,\"dbk\":\".ri126\",\"sk\":\"si126\",\"nodeSelector\":126,\"generateResourceDataBindingKey\":true},{\"nt\":1,\"dbk\":\".ri22\",\"sk\":\"si22\",\"nodeSelector\":22,\"generateResourceDataBindingKey\":true},{\"nt\":2,\"dbk\":\".ri23\",\"sk\":\"si23\",\"nodeSelector\":23,\"generateResourceDataBindingKey\":true}],\"sk\":\"si21\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":8}],\"hnk\":\"ctd.ps\",\"nodeSelector\":21}],\"hnk\":\"ctc.bt\"}]}],\"sk\":\"si33\"}],\"sk\":\"si32\"}],\"sk\":\"si101\"},\"s\":[{\"sk\":\"si101\",\"r\":{\"fs\":\"14\",\"bac\":\"#ffffff\",\"tc\":\"#4d5156\",\"ff\":\"Arial\",\"lh\":20,\"pb\":10,\"pr\":4,\"pt\":10}},{\"sk\":\"si32\",\"r\":{\"w\":\"100%\"}},{\"sk\":\"si108\",\"r\":{\"w\":\"100\",\"maxw\":200,\"pl\":20,\"pr\":20,\"pt\":5}},{\"sk\":\"si33\",\"r\":{\"w\":\"100%\",\"mb\":1}},{\"sk\":\"si27\",\"r\":{\"fs\":\"20\",\"tc\":\"#1A0DAB\",\"u\":true,\"w\":\"100%\",\"lh\":26},\"hr\":{\"u\":true}},{\"sk\":\"si34\",\"r\":{\"mb\":1}},{\"sk\":\"si28\",\"r\":{\"tc\":\"#202124\"}},{\"sk\":\"si29\",\"r\":{\"fs\":\"14\",\"lh\":20}},{\"sk\":\"si35\",\"r\":{\"ml\":20,\"mt\":4}},{\"sk\":\"si1\",\"r\":{\"tc\":\"#70757a\"}},{\"sk\":\"si11\",\"r\":{\"tc\":\"#70757a\"}},{\"sk\":\"si14\",\"r\":{\"ml\":0,\"mt\":1},\"styleSelector\":14},{\"sk\":\"si15\",\"r\":{\"fs\":\"15\",\"tc\":\"#1A0DAB\",\"lh\":22},\"hr\":{\"u\":true}},{\"sk\":\"si18\",\"r\":{\"tc\":\"#1A0DAB\"},\"hr\":{\"u\":true}},{\"sk\":\"si19\",\"r\":{\"tc\":\"#70757a\"}},{\"sk\":\"si20\",\"r\":{\"tc\":\"#70757a\"}},{\"sk\":\"si21\",\"r\":{\"boc\":\"#DADCE0\",\"br\":4,\"bw\":1,\"maxh\":55,\"mt\":3,\"pb\":2,\"pl\":6,\"pr\":6,\"pt\":2},\"styleSelector\":21},{\"sk\":\"si22\",\"r\":{\"fs\":\"15\",\"tc\":\"#1a0dab\",\"pb\":3,\"pl\":3,\"pr\":3,\"pt\":3},\"hr\":{\"u\":true},\"styleSelector\":22},{\"sk\":\"si23\",\"r\":{\"w\":\"12\",\"h\":\"12\",\"ml\":5}},{\"sk\":\"si24\",\"r\":{\"tc\":\"#202124\",\"ml\":5,\"mt\":2}},{\"sk\":\"si67\",\"r\":{\"fs\":\"8\",\"tc\":\"#327c50\",\"ff\":\"sans-serif\",\"fw\":2,\"lh\":8,\"mr\":8},\"styleSelector\":67},{\"sk\":\"si68\",\"r\":{\"w\":\"15\",\"h\":\"15\",\"mt\":5},\"styleSelector\":68},{\"sk\":\"si69\",\"r\":{\"br\":2}},{\"sk\":\"si70\",\"r\":{\"pb\":4,\"pl\":20,\"pr\":20,\"pt\":6},\"styleSelector\":70},{\"sk\":\"si71\",\"r\":{\"fs\":\"18\",\"tc\":\"#1A0DAB\",\"lh\":24},\"hr\":{\"u\":true},\"styleSelector\":71},{\"sk\":\"si128\",\"r\":{\"w\":\"100%\",\"h\":\"1\"}},{\"sk\":\"si130\",\"r\":{\"fw\":3}},{\"sk\":\"si126\",\"r\":{\"h\":\"15\",\"sfc\":\"#1a0dab\"}},{\"sk\":\"si150\",\"r\":{\"fs\":\"15\",\"tc\":\"#1a0dab\",\"pb\":3,\"pl\":3,\"pr\":3,\"pt\":3},\"hr\":{\"u\":true}},{\"sk\":\"wtaBubble\",\"r\":{\"fs\":\"12\",\"bac\":\"#ffffff\",\"tc\":\"#666666\",\"ff\":\"sans-serif\",\"boc\":\"#dddddd\",\"fw\":2,\"bw\":1,\"lh\":12,\"pb\":5,\"pl\":5,\"pr\":5,\"pt\":5}},{\"sk\":\"si25\",\"r\":{\"fs\":\"14\",\"tc\":\"#202124\",\"fw\":3,\"lh\":20},\"styleSelector\":25},{\"sk\":\"adBadgeBullet\",\"r\":{\"fw\":3,\"pl\":6,\"pr\":6}},{\"sk\":\"wtaBubbleText\",\"r\":{\"fs\":\"12\",\"tc\":\"#666666\"}},{\"sk\":\"si2\",\"r\":{\"pr\":3},\"styleSelector\":2},{\"sk\":\"srSpaceChar\",\"r\":{\"w\":\"3\"}},{\"sk\":\"srLink\",\"hr\":{\"u\":true}},{\"sk\":\"si16\",\"r\":{\"pl\":3,\"pr\":3},\"styleSelector\":16},{\"sk\":\"sitelinksLeftColumn\",\"r\":{\"pr\":20}},{\"sk\":\"sitelinksRightColumn\",\"r\":{\"pl\":20}},{\"sk\":\"exp-sitelinks-container\",\"r\":{\"pt\":4}},{\"sk\":\"pdcd\",\"r\":{\"pl\":4,\"pr\":4}},{\"sk\":\"priceExtensionChipsExpandoPriceHyphen\",\"r\":{\"ml\":5}},{\"sk\":\"priceExtensionChipsPrice\",\"r\":{\"ml\":5,\"mr\":5}},{\"sk\":\"promotionExtensionOccasion\",\"r\":{\"fw\":3}},{\"sk\":\"promotionExtensionLink\",\"hr\":{\"u\":true}},{\"sk\":\"si7\",\"r\":{\"pb\":3,\"pl\":6,\"pr\":4},\"styleSelector\":7},{\"sk\":\"ctdRatingSpacer\",\"r\":{\"w\":\"3\"}}]}, \"r\": {\"ri102\":\"https://afs.googleusercontent.com/ad_icons/standard/publisher_icon_image/default_gray.png\",\"ri22\":\"\\u0026#10148; Visit Website\"}, \"act\": {\"at\":1,\"l\":{\"nt\":0,\"dbk\":\"adBlock\",\"lr\":{\"o\":1,\"a\":9},\"sk\":\"si135\"}}}"
+          },
+          "3": [
+            "searchrs3"
+          ],
+          "4": 4
+        },
+        "10": [
+          {
+            "2": {
+              "1": opts.shoppingStyleId,
+              "2": "Shopping style",
+              "3": "{\"t\": {\"at\":2,\"l\":{\"nt\":0,\"lr\":{\"o\":1,\"a\":9,\"ap\":true},\"ch\":[{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0},\"ch\":[{\"nt\":2,\"dbk\":\"i\",\"sk\":\"si66\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":9}],\"acc\":{\"alt\":\"ialt\"},\"nodeSelector\":66}],\"sk\":\"si47\"}],\"sk\":\"si33\"},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0},\"ch\":[{\"nt\":1,\"dbk\":\"t\",\"lr\":{\"t\":0,\"nl\":2},\"sk\":\"si65\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":0}],\"nodeSelector\":65},{\"nt\":0,\"dbk\":\"wta.u\",\"lr\":{\"o\":0,\"a\":7,\"sb\":3},\"ch\":[{\"nt\":2,\"dbk\":\".wib\",\"sk\":\"si149\",\"ac\":[{\"act\":3,\"et\":0,\"en\":{\"nt\":0,\"ch\":[{\"nt\":1,\"dbk\":\"wta.t\",\"lr\":{\"nl\":1},\"ac\":[{\"act\":0,\"dbk\":\"wta.u\",\"et\":0,\"nm\":true}],\"pb\":{\"tr\":1,\"pbt\":\"wtac\"}}],\"sk\":\"wtaBubble\"}}],\"nodeSelector\":149}]}],\"sk\":\"si48\"},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":0,\"dbk\":\"pi\",\"lr\":{\"o\":1},\"ch\":[{\"nt\":0,\"dbk\":\"pi\",\"ch\":[{\"nt\":1,\"dbk\":\"pi.dp\"},{\"nt\":1,\"dbk\":\"pi.fp\"}],\"sk\":\"si136\",\"nodeSelector\":136},{\"nt\":0,\"dbk\":\"pi\",\"lr\":{\"o\":1,\"ov\":2},\"ch\":[{\"nt\":0,\"dbk\":\"pi.ip\",\"lr\":{\"o\":0,\"ov\":2},\"ch\":[{\"nt\":1,\"dbk\":\"pi.ip\",\"sk\":\"si122\",\"nodeSelector\":122}]},{\"nt\":1,\"dbk\":\"pi.id\",\"sk\":\"si121\",\"nodeSelector\":121},{\"nt\":1,\"dbk\":\"pi.ppu\",\"sk\":\"si58\",\"nodeSelector\":58},{\"nt\":1,\"dbk\":\"pi.s\",\"sk\":\"si57\",\"nodeSelector\":57}],\"sk\":\"si53\",\"nodeSelector\":53}],\"sk\":\"si61\",\"nodeSelector\":61},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":1,\"dbk\":\"cd\",\"sk\":\"si127\",\"nodeSelector\":127},{\"nt\":0,\"dbk\":\"rsf\",\"lr\":{\"o\":0,\"a\":6},\"ch\":[{\"nt\":4,\"dbk\":\"rsf\",\"sk\":\"si131\",\"acc\":{\"alt\":\"sr.sat\"},\"nodeSelector\":131},{\"nt\":1,\"dbk\":\"nr\",\"sk\":\"si146\",\"nodeSelector\":146}],\"sk\":\"si52\",\"nodeSelector\":52},{\"nt\":0,\"ch\":[{\"nt\":1,\"dbk\":\"er\"},{\"nt\":0,\"dbk\":\"eru\",\"lr\":{\"o\":0,\"a\":7},\"ch\":[{\"nt\":1,\"dbk\":\".eril\"},{\"nt\":2,\"dbk\":\"eru\",\"sk\":\"eri\",\"acc\":{\"alt\":\"era\"}}]}],\"sk\":\"si59\",\"nodeSelector\":59},{\"nt\":0,\"dbk\":\"li\",\"lr\":{\"o\":0},\"ch\":[{\"nt\":2,\"dbk\":\".ri104\",\"sk\":\"si104\",\"nodeSelector\":104,\"generateResourceDataBindingKey\":true},{\"nt\":1,\"dbk\":\"li.ld\",\"sk\":\"si56\",\"nodeSelector\":56}],\"sk\":\"si54\",\"nodeSelector\":54}]},{\"nt\":0,\"lr\":{\"o\":0,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":6},\"ch\":[{\"nt\":1,\"dbk\":\"m\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si60\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":1}],\"nodeSelector\":60}],\"sk\":\"si46\"},{\"nt\":0,\"dbk\":\".t\",\"lr\":{\"o\":0,\"sb\":3},\"ch\":[{\"nt\":1,\"dbk\":\".t\",\"sk\":\"si25\",\"nodeSelector\":25}],\"sk\":\"adbadgeContainer\"}],\"sk\":\"si41\"}],\"sk\":\"si36\"}],\"sk\":\"si35\"}],\"sk\":\"si32\"}],\"sk\":\"si101\"},\"s\":[{\"sk\":\"si101\",\"r\":{\"fs\":\"14\",\"bac\":\"#ffffff\",\"tc\":\"#70757A\",\"ff\":\"arial\",\"boc\":\"#E5E5E5\",\"w\":\"144\",\"fw\":2,\"br\":16,\"bw\":1,\"minh\":248,\"minw\":144,\"lh\":20,\"ml\":8,\"mt\":8}},{\"sk\":\"si47\",\"r\":{\"w\":\"100%\"}},{\"sk\":\"si35\",\"r\":{\"w\":\"100%\",\"pb\":12,\"pl\":8,\"pr\":8,\"pt\":12}},{\"sk\":\"si36\",\"r\":{\"pb\":20}},{\"sk\":\"si39\",\"r\":{\"fs\":\"14\",\"tc\":\"#70757A\"}},{\"sk\":\"si41\",\"r\":{\"w\":\"100%\",\"po\":{\"b\":\"0\"},\"pb\":12,\"pr\":16}},{\"sk\":\"si46\",\"r\":{\"w\":\"100%\"}},{\"sk\":\"si25\",\"r\":{\"fs\":\"14\",\"tc\":\"#4D5156\",\"boc\":\"#000000\",\"fw\":3,\"br\":2,\"bw\":0,\"lh\":20,\"ml\":8,\"pl\":0,\"pr\":0},\"styleSelector\":25},{\"sk\":\"si52\",\"r\":{\"fs\":\"14\",\"tc\":\"#70757A\"}},{\"sk\":\"si53\",\"r\":{\"fs\":\"14\",\"tc\":\"#70757A\",\"fw\":2}},{\"sk\":\"si59\",\"r\":{\"tc\":\"#70757A\"}},{\"sk\":\"si60\",\"r\":{\"fs\":\"14\",\"tc\":\"#4D5156\",\"lh\":20}},{\"sk\":\"si61\",\"r\":{\"fs\":\"14\",\"tc\":\"#4D5156\",\"fw\":3,\"lh\":20}},{\"sk\":\"si65\",\"r\":{\"fs\":\"16\",\"tc\":\"#1A0DAB\",\"w\":\"100%\",\"minw\":110,\"lh\":20}},{\"sk\":\"si66\",\"r\":{\"w\":\"144\",\"h\":\"144\",\"minh\":70,\"minw\":70},\"styleSelector\":66},{\"sk\":\"si149\",\"r\":{\"w\":\"21\",\"h\":\"18\",\"sfc\":\"#4D5156\",\"ml\":-3,\"pl\":0},\"styleSelector\":149},{\"sk\":\"wtaBubble\",\"r\":{\"fs\":\"12\",\"bac\":\"#ffffff\",\"tc\":\"#666666\",\"ff\":\"sans-serif\",\"boc\":\"#dddddd\",\"fw\":2,\"bw\":1,\"lh\":12,\"pb\":5,\"pl\":5,\"pr\":5,\"pt\":5}},{\"sk\":\"adbadgeContainer\",\"r\":{\"mr\":3}},{\"sk\":\"eri\",\"r\":{\"w\":\"37\",\"h\":\"20\"}}]}, \"r\": {\"eril\":\"Energy: \"}, \"act\": {\"at\":2,\"l\":{\"nt\":0,\"dbk\":\"adBlock\",\"lr\":{\"o\":0,\"a\":9,\"ov\":2},\"sk\":\"si135\"}}}"
+            },
+            "4": 2
+          },
+          {
+            "2": {
+              "1": opts.relatedSearchId,
+              "2": "Related searches",
+              "3": "{\"t\": {\"at\":4,\"l\":{\"nt\":0,\"lr\":{\"o\":0},\"ch\":[{\"nt\":0,\"dbk\":\"t\",\"lr\":{\"o\":0,\"a\":6},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":7},\"ch\":[{\"nt\":0,\"ch\":[{\"nt\":2,\"dbk\":\".ri102\",\"sk\":\"si102\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":18}],\"hnk\":\"ctd.iu\",\"acc\":{\"ah\":true},\"nodeSelector\":102,\"generateResourceDataBindingKey\":true},{\"nt\":2,\"dbk\":\"ctd.iu\",\"sk\":\"si5\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":26}],\"acc\":{\"ah\":true},\"nodeSelector\":5}],\"hnk\":\"squareImage.iu\"},{\"nt\":2,\"dbk\":\"squareImage.iu\",\"sk\":\"si102\",\"ac\":[{\"act\":0,\"dbk\":\"squareImage.cu\",\"et\":0,\"nb\":9}],\"acc\":{\"ah\":true},\"nodeSelector\":102}],\"sk\":\"si69\",\"nodeSelector\":69},{\"nt\":0,\"dbk\":\"t\",\"lr\":{\"o\":0,\"a\":6},\"ch\":[{\"nt\":1,\"dbk\":\"t\",\"sk\":\"si34\"}],\"sk\":\"si33\"},{\"nt\":2,\"dbk\":\".ri143\",\"lr\":{\"sb\":3},\"sk\":\"si143\",\"acc\":{\"ah\":true},\"nodeSelector\":143,\"generateResourceDataBindingKey\":true}],\"sk\":\"si144\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":0}]}],\"sk\":\"si101\"},\"s\":[{\"sk\":\"si101\",\"r\":{\"w\":\"100%\"}},{\"sk\":\"si144\",\"r\":{\"fs\":\"18\",\"bac\":\"#FFFFFF\",\"tc\":\"#1967D2\",\"w\":\"100%\",\"pb\":13,\"pl\":13,\"pr\":13,\"pt\":13},\"hr\":{\"bac\":\"#F6F9FE\",\"u\":true}},{\"sk\":\"si33\",\"r\":{\"w\":\"100%\",\"ml\":10,\"mr\":10}},{\"sk\":\"si102\",\"r\":{\"w\":\"30\",\"h\":\"30\",\"sfc\":\"#1967D2\",\"br\":15}},{\"sk\":\"si128\",\"r\":{\"bac\":\"#DFE1E5\",\"w\":\"100%\",\"h\":\"1\"}},{\"sk\":\"si133\",\"r\":{\"fs\":\"15\",\"bac\":\"#FFFFFF\",\"tc\":\"#555555\",\"br\":2,\"mb\":5}},{\"sk\":\"si135\",\"r\":{\"h\":\"100%\"}},{\"sk\":\"si143\",\"r\":{\"w\":\"24\",\"sfc\":\"#1967D2\",\"br\":12}}]}, \"r\": {\"ri102\":\"https://afs.googleusercontent.com/ad_icons/standard/publisher_icon_image/search.svg\",\"ri133\":\"Related searches\",\"ri143\":\"https://afs.googleusercontent.com/ad_icons/standard/publisher_icon_image/chevron.svg\"}, \"act\": {\"at\":4,\"l\":{\"nt\":0,\"dbk\":\"adBlock\",\"lr\":{\"o\":0,\"a\":0,\"ov\":2},\"ch\":[{\"nt\":0,\"ch\":[{\"nt\":1,\"dbk\":\".ri133\",\"sk\":\"si133\"}],\"sk\":\"rssAttrContainer\"}],\"sk\":\"si135\"},\"s\":[{\"sk\":\"rssAttrContainer\",\"r\":{\"w\":\"100%\"}},{\"sk\":\"si133\",\"r\":{}},{\"sk\":\"si135\",\"r\":{}}]}}"
+            },
+            "4": 4
+          }
+        ]
+      },
+      "10": 1,
+      "11": [
+        1,
+        2,
+        4,
+        5
+      ],
+      "12": {
+        "1": true
+      }
+    }
+  }
+
+  var settings = {
+    "url": "https://www.google.com/adsense/service/myads/SaveSearchAdStyle?pid=pub-" + opts.adsenseId + "&authuser=0&tpid=pub-" + opts.adsenseId + "&ov=3&hl=en_US&rpcTrackingId=%2Fadsense%2Fservice%2Fmyads%2FSaveSearchAdStyle%3Fpid%3Dpub-" + opts.adsenseId + "%26authuser%3D0%26tpid%3Dpub-" + opts.adsenseId + "%26ov%3D3%26hl%3Den_US%3A1",
+    "method": "POST",
+    "timeout": 0,
+    "headers": {
+      "activitylabels": "",
+      "activityname": "myAdsSearchSaveStyleMetadata",
+      "activitytrackingid": "myads",
+      "content-type": "application/json;charset=UTF-8",
+      "x-framework-xsrf-token": opts.xsrfToken
+    },
+    "data": JSON.stringify(obj),
+  };
+
+  let res;
+  try { await $.ajax(settings) } catch (error) { res = error.responseText; }
+  return res;
+}
+
+function clone(input){return JSON.parse(JSON.stringify(input))};
+
+async function doingUpdateOneById(opts = {}, type) {
+  if (!opts || !type || !opts.adsenseId || !opts.xsrfToken || !opts.name ||
+    !opts.styleId || !opts.shoppingStyleId || !opts.relatedSearchId || !opts.searchPageId) {
+    console.error("Missing required parameters");
+    return;
+  }
+
+  let res;
+  switch (type) {
+    case "search":
+      res = await updateSearchAdById(opts);
+      break;
+    case "relatedSearch":
+      res = await updateRelatedSearchById(opts);
+      break;
+    case "searchPage":
+      res = await updateSearchPageById(opts);
+      break;
+    case "condSearch":
+      let newOpts = clone(opts);
+      // newOpts.id = "2433785845";
+      newOpts.conditionalName = "s2s_test_32_top";
+      newOpts.divIds = ["s2s_test_32_top", "s2s_test_32_top_2"];
+      res = await actionNewSearchConditionalStyle(newOpts);
+      break;
+  }
+  res = handleResponse(res);
+
+  if (res && res["1"] && res["1"]["1"] != "") {
+    console.info(type + " with id " + res["1"]["1"] + " updated successfully");
+    return;
+  }
+
+  console.error("Error updating " + type, res);
+}
+
+async function updateSearchAdById(opts = {}) {
+  let newObj = clone(SEARCH_STYLE);
+
+  try {
+    newObj["1"]["1"] = opts.styleId;
+    newObj["1"]["4"] = opts.name;
+    newObj["1"]["10"] = 2; //1 Active //2 Archived
+
+    for (let index = 0; index < newObj["1"]["9"]["10"].length; index++) {
+      if (newObj["1"]["9"]["10"]["2"]["2"] == "Shopping style" && newObj["1"]["9"]["10"]["4"] == 2) {
+        newObj["1"]["9"]["10"]["2"]["1"] = opts.shoppingStyleId;
+      }
+      
+      if (newObj["1"]["9"]["10"]["2"]["2"] == "Related searches" && newObj["1"]["9"]["10"]["4"] == 4) {
+        newObj["1"]["9"]["10"]["2"]["1"] = opts.relatedSearchId;
+      }
+      
+      if (newObj["1"]["9"]["10"]["2"]["2"] == "Search Page" && newObj["1"]["9"]["10"]["4"] == 4) {
+        newObj["1"]["9"]["10"]["2"]["1"] = opts.searchPageId;
+      }
+    }
+  } catch (error) {}
+ 
+  
+  var settings = {
+    "url": "https://www.google.com/adsense/service/myads/SaveSearchAdStyle?pid=pub-" + opts.adsenseId + "&authuser=0&tpid=pub-" + opts.adsenseId + "&ov=3&hl=en_US&rpcTrackingId=%2Fadsense%2Fservice%2Fmyads%2FSaveSearchAdStyle%3Fpid%3Dpub-" + opts.adsenseId + "%26authuser%3D0%26tpid%3Dpub-" + opts.adsenseId + "%26ov%3D3%26hl%3Den_US%3A2",
+    "method": "POST",
+    "timeout": 0,
+    "headers": {
+
+      "X-Framework-Xsrf-Token": opts.xsrfToken,
+      "activityName": "myAdsSearchSaveAdStyle",
+      "Content-Type": "application/json;charset=UTF-8",
+      "activityLabels": "",
+      "activityTrackingId": "myads",
+    },
+    "data": JSON.stringify(newObj),
+  };
+
+  let res;
+  try { await $.ajax(settings) } catch (error) { res = error.responseText; }
+  return res;
+}
+
+async function updateRelatedSearchById(opts = {}) {
+  let newObj = clone(RELATED_STYLE);
+  try {
+    newObj["1"]["1"] = opts.relatedSearchId;
+    newObj["1"]["9"]["9"]["2"]["1"] = opts.styleId;
+    newObj["1"]["9"]["9"]["2"]["2"] = opts.name;
+    newObj["1"]["10"] = 2; //1 Active //2 Archived
+
+    for (let index = 0; index < newObj["1"]["9"]["10"].length; index++) {
+      if (newObj["1"]["9"]["10"]["2"]["2"] == "Shopping style" && newObj["1"]["9"]["10"]["4"] == 2) {
+        newObj["1"]["9"]["10"]["2"]["1"] = opts.shoppingStyleId;
+      }
+      
+      if (newObj["1"]["9"]["10"]["2"]["2"] == "Related searches" && newObj["1"]["9"]["10"]["4"] == 4) {
+        newObj["1"]["9"]["10"]["2"]["1"] = opts.relatedSearchId;
+      }
+      
+      if (newObj["1"]["9"]["10"]["2"]["2"] == "Search Page" && newObj["1"]["9"]["10"]["4"] == 4) {
+        newObj["1"]["9"]["10"]["2"]["1"] = opts.searchPageId;
+      }
+    }
+  } catch (error) {}
+
+  var settings = {
+    "url": "https://www.google.com/adsense/service/myads/SaveSearchAdStyle?pid=pub-" + opts.adsenseId + "&authuser=0&tpid=pub-" + opts.adsenseId + "&ov=3&hl=en_US&rpcTrackingId=%2Fadsense%2Fservice%2Fmyads%2FSaveSearchAdStyle%3Fpid%3Dpub-" + opts.adsenseId + "%26authuser%3D0%26tpid%3Dpub-" + opts.adsenseId + "%26ov%3D3%26hl%3Den_US%3A2",
+    "method": "POST",
+    "timeout": 0,
+    "headers": {
+      "activitylabels": "",
+      "activityname": "myAdsSearchSaveAdStyle",
+      "activitytrackingid": "myads",
+      "content-type": "application/json;charset=UTF-8",
+      "x-framework-xsrf-token": opts.xsrfToken
+    },
+    "data": JSON.stringify(newObj),
+  };
+
+  let res;
+  try { await $.ajax(settings) } catch (error) { res = error.responseText; }
+  return res;
+}
+
+async function updateSearchPageById(opts = {}) {
+  let newObj = clone(RELATED_SEARCH_PAGE_STYLE);
+  
+  try {
+    newObj["1"]["1"] = opts.searchPageId;
+    newObj["1"]["9"]["9"]["2"]["1"] = opts.styleId;
+    newObj["1"]["9"]["9"]["2"]["2"] = opts.name;
+    newObj["1"]["10"] = 2; //1 Active //2 Archived
+
+    for (let index = 0; index < newObj["1"]["9"]["10"].length; index++) {
+      if (newObj["1"]["9"]["10"]["2"]["2"] == "Shopping style" && newObj["1"]["9"]["10"]["4"] == 2) {
+        newObj["1"]["9"]["10"]["2"]["1"] = opts.shoppingStyleId;
+      }
+      
+      if (newObj["1"]["9"]["10"]["2"]["2"] == "Related searches" && newObj["1"]["9"]["10"]["4"] == 4) {
+        newObj["1"]["9"]["10"]["2"]["1"] = opts.relatedSearchId;
+      }
+      
+      if (newObj["1"]["9"]["10"]["2"]["2"] == "Search Page" && newObj["1"]["9"]["10"]["4"] == 4) {
+        newObj["1"]["9"]["10"]["2"]["1"] = opts.searchPageId;
+      }
+    }
+  } catch (error) {}
+
+  var settings = {
+    "url": "https://www.google.com/adsense/service/myads/SaveSearchAdStyle?pid=pub-" + opts.adsenseId + "&authuser=0&tpid=pub-" + opts.adsenseId + "&ov=3&hl=en_US&rpcTrackingId=%2Fadsense%2Fservice%2Fmyads%2FSaveSearchAdStyle%3Fpid%3Dpub-" + opts.adsenseId + "%26authuser%3D0%26tpid%3Dpub-" + opts.adsenseId + "%26ov%3D3%26hl%3Den_US%3A4",
+    "method": "POST",
+    "timeout": 0,
+    "headers": {
+      "activitylabels": "",
+      "activityname": "myAdsSearchSaveAdStyle",
+      "activitytrackingid": "myads",
+      "content-type": "application/json;charset=UTF-8",
+      "x-framework-xsrf-token": opts.xsrfToken
+    },
+    "data": JSON.stringify(newObj),
+  };
+
+  let res;
+  try { await $.ajax(settings) } catch (error) { res = error.responseText; }
+  return res;
+}
+
+async function actionNewSearchConditionalStyle(opts = {}){
+let obj = {
+    "1": {
+        "2": "5125181186",
+        "4": opts.conditionalName,
+        "7": [
+            {
+                "1": "Global Options",
+                "2": [
+                    {
+                        "2": {
+                            "2": {
+                                "1": {
+                                    "1": "50",
+                                    "2": 1
+                                },
+                                "2": {
+                                    "1": "4",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "50",
+                                    "2": 1
+                                }
+                            },
+                            "3": "#ffffff",
+                            "4": "#000000",
+                            "5": {
+                                "1": "14",
+                                "2": 1
+                            },
+                            "21": {
+                                "1": "20",
+                                "2": 1
+                            }
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 1
+                            },
+                            {
+                                "1": 3
+                            },
+                            {
+                                "1": 6
+                            },
+                            {
+                                "1": 7
+                            },
+                            {
+                                "1": 5
+                            }
+                        ],
+                        "5": 101,
+                        "6": "si101"
+                    }
+                ],
+                "5": false
+            },
+            {
+                "1": "Left container",
+                "2": [
+                    {
+                        "2": {
+                            "1": {
+                                "2": {
+                                    "1": "0",
+                                    "2": 1
+                                }
+                            },
+                            "2": {
+                                "1": {
+                                    "1": "0",
+                                    "2": 1
+                                },
+                                "2": {
+                                    "1": "0",
+                                    "2": 1
+                                },
+                                "4": {
+                                    "1": "0",
+                                    "2": 1
+                                }
+                            },
+                            "11": {
+                                "1": "0",
+                                "2": 1
+                            },
+                            "13": {
+                                "1": "200",
+                                "2": 1
+                            },
+                            "14": {
+                                "1": "0",
+                                "2": 1
+                            },
+                            "24": 2,
+                            "25": 1
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 6
+                            },
+                            {
+                                "1": 7
+                            },
+                            {
+                                "1": 8
+                            },
+                            {
+                                "1": 3
+                            },
+                            {
+                                "1": 9
+                            }
+                        ],
+                        "5": 108,
+                        "6": "si108"
+                    }
+                ],
+                "5": false
+            },
+            {
+                "1": "Headline",
+                "2": [
+                    {
+                        "2": {
+                            "2": {
+                                "1": {
+                                    "1": "15",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "22",
+                                    "2": 1
+                                }
+                            },
+                            "3": "#ffffff",
+                            "5": {
+                                "1": "16",
+                                "2": 1
+                            },
+                            "7": 2,
+                            "9": 1,
+                            "11": {
+                                "1": "100",
+                                "2": 2
+                            },
+                            "21": {
+                                "1": "48",
+                                "2": 1
+                            }
+                        },
+                        "3": {
+                            "9": 1
+                        },
+                        "4": [
+                            {
+                                "1": 1
+                            },
+                            {
+                                "1": 13
+                            },
+                            {
+                                "1": 2
+                            },
+                            {
+                                "1": 5
+                            },
+                            {
+                                "1": 6
+                            }
+                        ],
+                        "5": 27,
+                        "6": "si27"
+                    }
+                ],
+                "5": false
+            },
+            {
+                "1": "Display URL",
+                "2": [
+                    {
+                        "2": {
+                            "3": "#999999",
+                            "5": {
+                                "1": "10",
+                                "2": 1
+                            },
+                            "21": {
+                                "1": "11",
+                                "2": 1
+                            },
+                            "22": "1",
+                            "29": 1
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 1
+                            },
+                            {
+                                "1": 13
+                            },
+                            {
+                                "1": 2
+                            },
+                            {
+                                "1": 5
+                            },
+                            {
+                                "1": 6
+                            }
+                        ],
+                        "5": 28,
+                        "6": "si28"
+                    }
+                ],
+                "5": true
+            },
+            {
+                "1": "Description",
+                "2": [
+                    {
+                        "2": {
+                            "3": "#999999",
+                            "5": {
+                                "1": "10",
+                                "2": 1
+                            },
+                            "21": {
+                                "1": "15",
+                                "2": 1
+                            }
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 1
+                            },
+                            {
+                                "1": 13
+                            },
+                            {
+                                "1": 2
+                            },
+                            {
+                                "1": 6
+                            }
+                        ],
+                        "5": 29,
+                        "6": "si29"
+                    }
+                ],
+                "5": false
+            },
+            {
+                "1": "Unit Container",
+                "2": [
+                    {
+                        "2": {},
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 3
+                            },
+                            {
+                                "1": 7
+                            }
+                        ],
+                        "5": 135,
+                        "6": "si135"
+                    }
+                ],
+                "5": false
+            },
+            {
+                "1": "Search Keyword",
+                "2": [
+                    {
+                        "2": {
+                            "7": 3,
+                            "9": 4
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 11,
+                                "2": "Text color"
+                            },
+                            {
+                                "1": 13
+                            }
+                        ],
+                        "5": 130,
+                        "6": "si130"
+                    }
+                ],
+                "5": false
+            },
+            {
+                "1": "Ad Separator",
+                "2": [
+                    {
+                        "2": {
+                            "11": {
+                                "1": "100",
+                                "2": 2
+                            },
+                            "14": {
+                                "1": "1",
+                                "2": 1
+                            }
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 3,
+                                "2": "Separator color"
+                            },
+                            {
+                                "1": 19
+                            }
+                        ],
+                        "5": 128,
+                        "6": "si128"
+                    }
+                ],
+                "5": false
+            },
+            {
+                "1": "Image",
+                "2": [
+                    {
+                        "2": {
+                            "3": "#4caf50",
+                            "11": {
+                                "1": "30",
+                                "2": 1
+                            },
+                            "14": {
+                                "1": "30",
+                                "2": 1
+                            },
+                            "17": {
+                                "2": {
+                                    "1": "0",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "5",
+                                    "2": 1
+                                }
+                            },
+                            "18": {
+                                "2": {
+                                    "1": "0",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "5",
+                                    "2": 1
+                                }
+                            },
+                            "19": {
+                                "2": {
+                                    "1": "0",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "5",
+                                    "2": 1
+                                }
+                            },
+                            "20": {
+                                "2": {
+                                    "1": "0",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "5",
+                                    "2": 1
+                                }
+                            }
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 12
+                            },
+                            {
+                                "1": 9
+                            },
+                            {
+                                "1": 7
+                            },
+                            {
+                                "1": 11,
+                                "2": "Icon color"
+                            }
+                        ],
+                        "5": 102,
+                        "6": "si102",
+                        "7": {
+                            "1": "https://afs.googleusercontent.com/ad_icons/standard/publisher_icon_image/where_to_vote.svg"
+                        }
+                    },
+                    {
+                        "2": {
+                            "17": {
+                                "3": {
+                                    "1": "2",
+                                    "2": 1
+                                }
+                            },
+                            "18": {
+                                "3": {
+                                    "1": "2",
+                                    "2": 1
+                                }
+                            },
+                            "19": {
+                                "3": {
+                                    "1": "2",
+                                    "2": 1
+                                }
+                            },
+                            "20": {
+                                "3": {
+                                    "1": "2",
+                                    "2": 1
+                                }
+                            }
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 8
+                            }
+                        ],
+                        "5": 69,
+                        "6": "si69"
+                    }
+                ],
+                "5": false
+            },
+            {
+                "1": "Ad Badge",
+                "2": [
+                    {
+                        "2": {
+                            "3": "#999999",
+                            "5": {
+                                "1": "10",
+                                "2": 1
+                            },
+                            "7": 3,
+                            "17": {
+                                "1": "#999999"
+                            },
+                            "18": {
+                                "1": "#999999"
+                            },
+                            "19": {
+                                "1": "#999999"
+                            },
+                            "20": {
+                                "1": "#999999"
+                            },
+                            "21": {
+                                "1": "11",
+                                "2": 1
+                            }
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 1
+                            },
+                            {
+                                "1": 2
+                            },
+                            {
+                                "1": 3
+                            },
+                            {
+                                "1": 6
+                            }
+                        ],
+                        "5": 25,
+                        "6": "si25"
+                    }
+                ],
+                "5": false
+            },
+            {
+                "1": "Sitelink",
+                "2": [
+                    {
+                        "2": {
+                            "3": "#ffffff",
+                            "5": {
+                                "1": "15",
+                                "2": 1
+                            },
+                            "21": {
+                                "1": "22",
+                                "2": 1
+                            }
+                        },
+                        "3": {
+                            "9": 1
+                        },
+                        "4": [
+                            {
+                                "1": 1
+                            },
+                            {
+                                "1": 13
+                            },
+                            {
+                                "1": 2
+                            },
+                            {
+                                "1": 5
+                            }
+                        ],
+                        "5": 15,
+                        "6": "si15"
+                    },
+                    {
+                        "2": {
+                            "1": {
+                                "1": {
+                                    "1": "1",
+                                    "2": 1
+                                },
+                                "4": {
+                                    "1": "0",
+                                    "2": 1
+                                }
+                            }
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 6
+                            }
+                        ],
+                        "5": 14,
+                        "6": "si14"
+                    }
+                ],
+                "4": true,
+                "5": false
+            },
+            {
+                "1": "Enhanced Sitelinks",
+                "2": [
+                    {
+                        "2": {
+                            "2": {
+                                "1": {
+                                    "1": "6",
+                                    "2": 1
+                                },
+                                "2": {
+                                    "1": "20",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "4",
+                                    "2": 1
+                                },
+                                "4": {
+                                    "1": "20",
+                                    "2": 1
+                                }
+                            }
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 6
+                            }
+                        ],
+                        "5": 70,
+                        "6": "si70"
+                    },
+                    {
+                        "2": {
+                            "3": "#ffffff",
+                            "5": {
+                                "1": "18",
+                                "2": 1
+                            },
+                            "21": {
+                                "1": "24",
+                                "2": 1
+                            }
+                        },
+                        "3": {
+                            "9": 1
+                        },
+                        "4": [
+                            {
+                                "1": 1
+                            },
+                            {
+                                "1": 13
+                            },
+                            {
+                                "1": 2
+                            },
+                            {
+                                "1": 5
+                            }
+                        ],
+                        "5": 71,
+                        "6": "si71"
+                    },
+                    {
+                        "2": {},
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 1
+                            },
+                            {
+                                "1": 13
+                            },
+                            {
+                                "1": 2
+                            }
+                        ],
+                        "5": 72,
+                        "6": "si72"
+                    }
+                ],
+                "4": true,
+                "5": false
+            },
+            {
+                "1": "Rating",
+                "2": [
+                    {
+                        "2": {
+                            "3": "#ffffff"
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 1
+                            },
+                            {
+                                "1": 13
+                            },
+                            {
+                                "1": 2
+                            }
+                        ],
+                        "5": 3,
+                        "6": "si3"
+                    },
+                    {
+                        "2": {
+                            "3": "#70757a"
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 6
+                            }
+                        ],
+                        "5": 1,
+                        "6": "si1"
+                    }
+                ],
+                "4": true,
+                "5": false
+            },
+            {
+                "1": "Price and Promotion",
+                "2": [
+                    {
+                        "2": {},
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 13
+                            },
+                            {
+                                "1": 2
+                            },
+                            {
+                                "1": 6
+                            }
+                        ],
+                        "5": 17,
+                        "6": "si17"
+                    },
+                    {
+                        "2": {
+                            "3": "#ffffff"
+                        },
+                        "3": {
+                            "9": 1
+                        },
+                        "4": [
+                            {
+                                "1": 11,
+                                "2": "Link color"
+                            }
+                        ],
+                        "5": 18,
+                        "6": "si18"
+                    },
+                    {
+                        "2": {
+                            "3": "#ffffff"
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 11,
+                                "2": "Text color"
+                            }
+                        ],
+                        "5": 137,
+                        "6": "si137"
+                    },
+                    {
+                        "2": {
+                            "3": "#ffffff"
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 11,
+                                "2": "Description color"
+                            }
+                        ],
+                        "5": 19,
+                        "6": "si19"
+                    }
+                ],
+                "4": true,
+                "5": false
+            },
+            {
+                "1": "Location",
+                "2": [
+                    {
+                        "2": {
+                            "3": "#ffffff"
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 1
+                            },
+                            {
+                                "1": 13
+                            },
+                            {
+                                "1": 2
+                            },
+                            {
+                                "1": 6
+                            }
+                        ],
+                        "5": 11,
+                        "6": "si11"
+                    }
+                ],
+                "4": true,
+                "5": false
+            },
+            {
+                "1": "Phone Number",
+                "2": [
+                    {
+                        "2": {
+                            "3": "#ffffff"
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 1
+                            },
+                            {
+                                "1": 13
+                            },
+                            {
+                                "1": 2
+                            },
+                            {
+                                "1": 6
+                            }
+                        ],
+                        "5": 20,
+                        "6": "si20"
+                    }
+                ],
+                "3": 3,
+                "4": true,
+                "5": false
+            },
+            {
+                "1": "Call to Action",
+                "2": [
+                    {
+                        "2": {
+                            "1": {
+                                "1": {
+                                    "1": "30",
+                                    "2": 1
+                                },
+                                "2": {
+                                    "1": "20",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "10",
+                                    "2": 1
+                                },
+                                "4": {
+                                    "1": "20",
+                                    "2": 1
+                                }
+                            },
+                            "2": {
+                                "1": {
+                                    "1": "50",
+                                    "2": 1
+                                },
+                                "2": {
+                                    "1": "50",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "50",
+                                    "2": 1
+                                },
+                                "4": {
+                                    "1": "50",
+                                    "2": 1
+                                }
+                            },
+                            "4": "#e31c4e",
+                            "16": {
+                                "1": "55",
+                                "2": 1
+                            },
+                            "17": {
+                                "1": "#ffffff",
+                                "2": {
+                                    "1": "5",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "20",
+                                    "2": 1
+                                }
+                            },
+                            "18": {
+                                "1": "#ffffff",
+                                "2": {
+                                    "1": "5",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "20",
+                                    "2": 1
+                                }
+                            },
+                            "19": {
+                                "1": "#ffffff",
+                                "2": {
+                                    "1": "5",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "20",
+                                    "2": 1
+                                }
+                            },
+                            "20": {
+                                "1": "#ffffff",
+                                "2": {
+                                    "1": "5",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "20",
+                                    "2": 1
+                                }
+                            }
+                        },
+                        "3": {
+                            "4": "#fe0c3d"
+                        },
+                        "4": [
+                            {
+                                "1": 3
+                            },
+                            {
+                                "1": 7
+                            },
+                            {
+                                "1": 8
+                            },
+                            {
+                                "1": 6
+                            },
+                            {
+                                "1": 5
+                            }
+                        ],
+                        "5": 21,
+                        "6": "si21"
+                    },
+                    {
+                        "2": {
+                            "2": {
+                                "1": {
+                                    "1": "3",
+                                    "2": 1
+                                },
+                                "2": {
+                                    "1": "3",
+                                    "2": 1
+                                },
+                                "3": {
+                                    "1": "3",
+                                    "2": 1
+                                },
+                                "4": {
+                                    "1": "3",
+                                    "2": 1
+                                }
+                            },
+                            "3": "#ffffff",
+                            "5": {
+                                "1": "18",
+                                "2": 1
+                            },
+                            "6": "Helvetica",
+                            "7": 3,
+                            "21": {
+                                "1": "22",
+                                "2": 1
+                            }
+                        },
+                        "3": {
+                            "4": "#fe0c3d",
+                            "9": 1
+                        },
+                        "4": [
+                            {
+                                "1": 1
+                            },
+                            {
+                                "1": 13
+                            },
+                            {
+                                "1": 2
+                            },
+                            {
+                                "1": 5
+                            }
+                        ],
+                        "5": 22,
+                        "6": "si22",
+                        "7": {
+                            "1": "&#10148; Visit Website"
+                        }
+                    }
+                ],
+                "4": true,
+                "5": false
+            },
+            {
+                "1": "Ad Disclosure",
+                "2": [
+                    {
+                        "2": {
+                            "3": "#999999",
+                            "7": 2
+                        },
+                        "3": {},
+                        "4": [
+                            {
+                                "1": 1
+                            },
+                            {
+                                "1": 13
+                            },
+                            {
+                                "1": 2
+                            },
+                            {
+                                "1": 6
+                            }
+                        ],
+                        "5": 26,
+                        "6": "si26"
+                    }
+                ],
+                "4": true,
+                "5": false
+            }
+        ],
+        "9": {
+            "9": {
+                "1": [
+                    1,
+                    3,
+                    2
+                ],
+                "2": {
+                    "1": opts.styleId,
+                    "2": opts.name,
+                    "3": ""
+                },
+                "3": opts.divIds,
+                "4": 1
+            },
+            "10": [
+                {
+                    "2": {
+                        "1": opts.relatedSearchId,
+                        "2": "Related searches",
+                        "3": "{\"t\": {\"at\":4,\"l\":{\"nt\":0,\"lr\":{\"o\":0},\"ch\":[{\"nt\":0,\"dbk\":\"t\",\"lr\":{\"o\":0,\"a\":6},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":7},\"ch\":[{\"nt\":0,\"ch\":[{\"nt\":2,\"dbk\":\".ri102\",\"sk\":\"si102\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":18}],\"hnk\":\"ctd.iu\",\"acc\":{\"ah\":true},\"nodeSelector\":102,\"generateResourceDataBindingKey\":true},{\"nt\":2,\"dbk\":\"ctd.iu\",\"sk\":\"si5\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":26}],\"acc\":{\"ah\":true},\"nodeSelector\":5}],\"hnk\":\"squareImage.iu\"},{\"nt\":2,\"dbk\":\"squareImage.iu\",\"sk\":\"si102\",\"ac\":[{\"act\":0,\"dbk\":\"squareImage.cu\",\"et\":0,\"nb\":9}],\"acc\":{\"ah\":true},\"nodeSelector\":102}],\"sk\":\"si69\",\"nodeSelector\":69},{\"nt\":0,\"dbk\":\"t\",\"lr\":{\"o\":0,\"a\":6},\"ch\":[{\"nt\":1,\"dbk\":\"t\",\"sk\":\"si34\"}],\"sk\":\"si33\"},{\"nt\":2,\"dbk\":\".ri143\",\"lr\":{\"sb\":3},\"sk\":\"si143\",\"acc\":{\"ah\":true},\"nodeSelector\":143,\"generateResourceDataBindingKey\":true}],\"sk\":\"si144\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":0}]}],\"sk\":\"si101\"},\"s\":[{\"sk\":\"si101\",\"r\":{\"w\":\"100%\"}},{\"sk\":\"si144\",\"r\":{\"fs\":\"20\",\"bac\":\"#e31c4e\",\"tc\":\"#ffffff\",\"w\":\"100%\",\"fw\":3,\"br\":5,\"lh\":48,\"mb\":5,\"ml\":0,\"mr\":0,\"mt\":5,\"pb\":5,\"pl\":5,\"pr\":5,\"pt\":5},\"hr\":{\"bac\":\"#fe2c55\",\"u\":true}},{\"sk\":\"si33\",\"r\":{\"w\":\"100%\",\"ml\":10,\"mr\":10}},{\"sk\":\"si102\",\"r\":{\"w\":\"24\",\"h\":\"24\",\"sfc\":\"#ffffff\",\"br\":15}},{\"sk\":\"si128\",\"r\":{\"w\":\"100%\",\"h\":\"1\"}},{\"sk\":\"si133\",\"r\":{\"fs\":\"12\",\"bac\":\"#000000\",\"tc\":\"#999999\",\"ff\":\"Verdana\",\"br\":2,\"mb\":5,\"ml\":0}},{\"sk\":\"si135\",\"r\":{\"bac\":\"#000000\",\"h\":\"100%\"}},{\"sk\":\"si143\",\"r\":{\"w\":\"24\",\"h\":\"24\",\"sfc\":\"#ffffff\",\"br\":12}}]}, \"r\": {\"ri102\":\"https://afs.googleusercontent.com/ad_icons/standard/publisher_icon_image/chevron.svg\",\"ri133\":\"Related searches\",\"ri143\":\"https://afs.googleusercontent.com/ad_icons/standard/publisher_icon_image/chevron.svg\"}, \"act\": {\"at\":4,\"l\":{\"nt\":0,\"dbk\":\"adBlock\",\"lr\":{\"o\":0,\"a\":0,\"ov\":2},\"ch\":[{\"nt\":0,\"ch\":[{\"nt\":1,\"dbk\":\".ri133\",\"sk\":\"si133\"}],\"sk\":\"rssAttrContainer\"}],\"sk\":\"si135\"},\"s\":[{\"sk\":\"rssAttrContainer\",\"r\":{\"w\":\"100%\"}},{\"sk\":\"si133\",\"r\":{}},{\"sk\":\"si135\",\"r\":{}}]}}"
+                    },
+                    "4": 4
+                },
+                {
+                    "1": [
+                        1,
+                        2,
+                        3
+                    ],
+                    "2": {
+                        "1": opts.searchPageId,
+                        "2": "Search Page",
+                        "3": "{\"t\": {\"at\":4,\"l\":{\"nt\":0,\"lr\":{\"o\":0},\"ch\":[{\"nt\":0,\"dbk\":\"t\",\"lr\":{\"o\":0,\"a\":6},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":7},\"ch\":[{\"nt\":0,\"ch\":[{\"nt\":2,\"dbk\":\".ri102\",\"sk\":\"si102\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":18}],\"hnk\":\"ctd.iu\",\"acc\":{\"ah\":true},\"nodeSelector\":102,\"generateResourceDataBindingKey\":true},{\"nt\":2,\"dbk\":\"ctd.iu\",\"sk\":\"si5\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":26}],\"acc\":{\"ah\":true},\"nodeSelector\":5}],\"hnk\":\"squareImage.iu\"},{\"nt\":2,\"dbk\":\"squareImage.iu\",\"sk\":\"si102\",\"ac\":[{\"act\":0,\"dbk\":\"squareImage.cu\",\"et\":0,\"nb\":9}],\"acc\":{\"ah\":true},\"nodeSelector\":102}],\"sk\":\"si69\",\"nodeSelector\":69},{\"nt\":0,\"dbk\":\"t\",\"lr\":{\"o\":0,\"a\":6},\"ch\":[{\"nt\":1,\"dbk\":\"t\",\"sk\":\"si34\"}],\"sk\":\"si33\"},{\"nt\":2,\"dbk\":\".ri143\",\"lr\":{\"sb\":3},\"sk\":\"si143\",\"acc\":{\"ah\":true},\"nodeSelector\":143,\"generateResourceDataBindingKey\":true}],\"sk\":\"si144\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":0}]}],\"sk\":\"si101\"},\"s\":[{\"sk\":\"si101\",\"r\":{\"w\":\"100%\"}},{\"sk\":\"si144\",\"r\":{\"fs\":\"12\",\"bac\":\"#000000\",\"tc\":\"#c6dafc\",\"ff\":\"Verdana\",\"w\":\"100%\",\"fw\":2,\"br\":5,\"lh\":25,\"mb\":0,\"ml\":0,\"mr\":0,\"mt\":0,\"pb\":5,\"pl\":0,\"pr\":5,\"pt\":5},\"hr\":{\"bac\":\"#000000\",\"u\":true}},{\"sk\":\"si33\",\"r\":{\"w\":\"100%\",\"ml\":10,\"mr\":10}},{\"sk\":\"si102\",\"r\":{\"w\":\"0\",\"h\":\"0\",\"sfc\":\"#000000\",\"br\":15}},{\"sk\":\"si128\",\"r\":{\"w\":\"100%\",\"h\":\"1\"}},{\"sk\":\"si133\",\"r\":{\"fs\":\"10\",\"bac\":\"#000000\",\"tc\":\"#999999\",\"ff\":\"Verdana\",\"br\":2,\"mb\":5,\"ml\":10}},{\"sk\":\"si135\",\"r\":{\"bac\":\"#000000\",\"h\":\"100%\"}},{\"sk\":\"si143\",\"r\":{\"w\":\"0\",\"h\":\"0\",\"sfc\":\"#000000\",\"br\":12}}]}, \"r\": {\"ri102\":\"https://afs.googleusercontent.com/ad_icons/standard/publisher_icon_image/chevron.svg\",\"ri133\":\"Related searches\",\"ri143\":\"https://afs.googleusercontent.com/ad_icons/standard/publisher_icon_image/chevron.svg\"}, \"act\": {\"at\":4,\"l\":{\"nt\":0,\"dbk\":\"adBlock\",\"lr\":{\"o\":0,\"a\":0,\"ov\":2},\"ch\":[{\"nt\":0,\"ch\":[{\"nt\":1,\"dbk\":\".ri133\",\"sk\":\"si133\"}],\"sk\":\"rssAttrContainer\"}],\"sk\":\"si135\"},\"s\":[{\"sk\":\"rssAttrContainer\",\"r\":{\"w\":\"100%\"}},{\"sk\":\"si133\",\"r\":{}},{\"sk\":\"si135\",\"r\":{}}]}}"
+                    },
+                    "3": [
+                        "searchrs3"
+                    ],
+                    "4": 4
+                },
+                {
+                    "2": {
+                        "1": opts.shoppingStyleId,
+                        "2": "Shopping style",
+                        "3": "{\"t\": {\"at\":2,\"l\":{\"nt\":0,\"lr\":{\"o\":1,\"a\":9,\"ap\":true},\"ch\":[{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0},\"ch\":[{\"nt\":2,\"dbk\":\"i\",\"sk\":\"si66\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":9}],\"acc\":{\"alt\":\"ialt\"},\"nodeSelector\":66}],\"sk\":\"si47\"}],\"sk\":\"si33\"},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0},\"ch\":[{\"nt\":1,\"dbk\":\"t\",\"lr\":{\"t\":0,\"nl\":2},\"sk\":\"si65\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":0}],\"nodeSelector\":65},{\"nt\":0,\"dbk\":\"wta.u\",\"lr\":{\"o\":0,\"a\":7,\"sb\":3},\"ch\":[{\"nt\":2,\"dbk\":\".wib\",\"sk\":\"si149\",\"ac\":[{\"act\":3,\"et\":0,\"en\":{\"nt\":0,\"ch\":[{\"nt\":1,\"dbk\":\"wta.t\",\"lr\":{\"nl\":1},\"ac\":[{\"act\":0,\"dbk\":\"wta.u\",\"et\":0,\"nm\":true}],\"pb\":{\"tr\":1,\"pbt\":\"wtac\"}}],\"sk\":\"wtaBubble\"}}],\"nodeSelector\":149}]}],\"sk\":\"si48\"},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":0,\"dbk\":\"pi\",\"lr\":{\"o\":1},\"ch\":[{\"nt\":0,\"dbk\":\"pi\",\"ch\":[{\"nt\":1,\"dbk\":\"pi.dp\"},{\"nt\":1,\"dbk\":\"pi.fp\"}],\"sk\":\"si136\",\"nodeSelector\":136},{\"nt\":0,\"dbk\":\"pi\",\"lr\":{\"o\":1,\"ov\":2},\"ch\":[{\"nt\":0,\"dbk\":\"pi.ip\",\"lr\":{\"o\":0,\"ov\":2},\"ch\":[{\"nt\":1,\"dbk\":\"pi.ip\",\"sk\":\"si122\",\"nodeSelector\":122}]},{\"nt\":1,\"dbk\":\"pi.id\",\"sk\":\"si121\",\"nodeSelector\":121},{\"nt\":1,\"dbk\":\"pi.ppu\",\"sk\":\"si58\",\"nodeSelector\":58},{\"nt\":1,\"dbk\":\"pi.s\",\"sk\":\"si57\",\"nodeSelector\":57}],\"sk\":\"si53\",\"nodeSelector\":53}],\"sk\":\"si61\",\"nodeSelector\":61},{\"nt\":0,\"lr\":{\"o\":1,\"a\":9},\"ch\":[{\"nt\":1,\"dbk\":\"cd\",\"sk\":\"si127\",\"nodeSelector\":127},{\"nt\":0,\"dbk\":\"rsf\",\"lr\":{\"o\":0,\"a\":6},\"ch\":[{\"nt\":4,\"dbk\":\"rsf\",\"sk\":\"si131\",\"acc\":{\"alt\":\"sr.sat\"},\"nodeSelector\":131},{\"nt\":1,\"dbk\":\"nr\",\"sk\":\"si146\",\"nodeSelector\":146}],\"sk\":\"si52\",\"nodeSelector\":52},{\"nt\":0,\"ch\":[{\"nt\":1,\"dbk\":\"er\"},{\"nt\":0,\"dbk\":\"eru\",\"lr\":{\"o\":0,\"a\":7},\"ch\":[{\"nt\":1,\"dbk\":\".eril\"},{\"nt\":2,\"dbk\":\"eru\",\"sk\":\"eri\",\"acc\":{\"alt\":\"era\"}}]}],\"sk\":\"si59\",\"nodeSelector\":59},{\"nt\":0,\"dbk\":\"li\",\"lr\":{\"o\":0},\"ch\":[{\"nt\":2,\"dbk\":\".ri104\",\"sk\":\"si104\",\"nodeSelector\":104,\"generateResourceDataBindingKey\":true},{\"nt\":1,\"dbk\":\"li.ld\",\"sk\":\"si56\",\"nodeSelector\":56}],\"sk\":\"si54\",\"nodeSelector\":54}]},{\"nt\":0,\"lr\":{\"o\":0,\"a\":9},\"ch\":[{\"nt\":0,\"lr\":{\"o\":0,\"a\":6},\"ch\":[{\"nt\":1,\"dbk\":\"m\",\"lr\":{\"t\":0,\"nl\":1},\"sk\":\"si60\",\"ac\":[{\"act\":0,\"dbk\":\"u\",\"et\":0,\"nb\":1}],\"nodeSelector\":60}],\"sk\":\"si46\"},{\"nt\":0,\"dbk\":\".t\",\"lr\":{\"o\":0,\"sb\":3},\"ch\":[{\"nt\":1,\"dbk\":\".t\",\"sk\":\"si25\",\"nodeSelector\":25}],\"sk\":\"adbadgeContainer\"}],\"sk\":\"si41\"}],\"sk\":\"si36\"}],\"sk\":\"si35\"}],\"sk\":\"si32\"}],\"sk\":\"si101\"},\"s\":[{\"sk\":\"si101\",\"r\":{\"fs\":\"14\",\"bac\":\"#ffffff\",\"tc\":\"#70757A\",\"ff\":\"arial\",\"boc\":\"#E5E5E5\",\"w\":\"144\",\"fw\":2,\"br\":16,\"bw\":1,\"minh\":248,\"minw\":144,\"lh\":20,\"ml\":8,\"mt\":8}},{\"sk\":\"si47\",\"r\":{\"w\":\"100%\"}},{\"sk\":\"si35\",\"r\":{\"w\":\"100%\",\"pb\":12,\"pl\":8,\"pr\":8,\"pt\":12}},{\"sk\":\"si36\",\"r\":{\"pb\":20}},{\"sk\":\"si39\",\"r\":{\"fs\":\"14\",\"tc\":\"#70757A\"}},{\"sk\":\"si41\",\"r\":{\"w\":\"100%\",\"po\":{\"b\":\"0\"},\"pb\":12,\"pr\":16}},{\"sk\":\"si46\",\"r\":{\"w\":\"100%\"}},{\"sk\":\"si25\",\"r\":{\"fs\":\"14\",\"tc\":\"#4D5156\",\"boc\":\"#000000\",\"fw\":3,\"br\":2,\"bw\":0,\"lh\":20,\"ml\":8,\"pl\":0,\"pr\":0},\"styleSelector\":25},{\"sk\":\"si52\",\"r\":{\"fs\":\"14\",\"tc\":\"#70757A\"}},{\"sk\":\"si53\",\"r\":{\"fs\":\"14\",\"tc\":\"#70757A\",\"fw\":2}},{\"sk\":\"si59\",\"r\":{\"tc\":\"#70757A\"}},{\"sk\":\"si60\",\"r\":{\"fs\":\"14\",\"tc\":\"#4D5156\",\"lh\":20}},{\"sk\":\"si61\",\"r\":{\"fs\":\"14\",\"tc\":\"#4D5156\",\"fw\":3,\"lh\":20}},{\"sk\":\"si65\",\"r\":{\"fs\":\"16\",\"tc\":\"#1A0DAB\",\"w\":\"100%\",\"minw\":110,\"lh\":20}},{\"sk\":\"si66\",\"r\":{\"w\":\"144\",\"h\":\"144\",\"minh\":70,\"minw\":70},\"styleSelector\":66},{\"sk\":\"si149\",\"r\":{\"w\":\"21\",\"h\":\"18\",\"sfc\":\"#4D5156\",\"ml\":-3,\"pl\":0},\"styleSelector\":149},{\"sk\":\"wtaBubble\",\"r\":{\"fs\":\"12\",\"bac\":\"#ffffff\",\"tc\":\"#666666\",\"ff\":\"sans-serif\",\"boc\":\"#dddddd\",\"fw\":2,\"bw\":1,\"lh\":12,\"pb\":5,\"pl\":5,\"pr\":5,\"pt\":5}},{\"sk\":\"adbadgeContainer\",\"r\":{\"mr\":3}},{\"sk\":\"eri\",\"r\":{\"w\":\"37\",\"h\":\"20\"}}]}, \"r\": {\"eril\":\"Energy: \"}, \"act\": {\"at\":2,\"l\":{\"nt\":0,\"dbk\":\"adBlock\",\"lr\":{\"o\":0,\"a\":9,\"ov\":2},\"sk\":\"si135\"}}}"
+                    },
+                    "4": 2
+                }
+            ]
+        },
+        "10": 1,
+        "11": [
+            1,
+            2,
+            4,
+            5
+        ],
+        "12": {
+            "1": true
+        }
+    }
+}
+
+//Create
+if (opts.id){
+    obj["1"]["1"] = opts.id;
+}
+var settings = {
+  "url": "https://www.google.com/adsense/service/myads/SaveSearchAdStyle?pid=pub-"+opts.adsenseId+"&authuser=0&tpid=pub-"+opts.adsenseId+"&ov=3&hl=en_US&rpcTrackingId=%2Fadsense%2Fservice%2Fmyads%2FSaveSearchAdStyle%3Fpid%3Dpub-"+opts.adsenseId+"%26authuser%3D0%26tpid%3Dpub-"+opts.adsenseId+"%26ov%3D3%26hl%3Den_US%3A1",
+  "method": "POST",
+  "timeout": 0,
+  "headers": {
+    "activitylabels": "",
+    "activityname": "myAdsSearchSaveStyleMetadata",
+    "activitytrackingid": "myads",
+    "content-type": "application/json;charset=UTF-8",
+    "x-framework-xsrf-token": opts.xsrfToken
+  },
+  "data": JSON.stringify(obj),
+};
+
+let res;
+try { await $.ajax(settings) } catch (error) { res = error.responseText; }
+return res;
+}
+
+async function getOldDataById(id = "", opts = {}){
+  if (!id){
+    console.error("id is required");
+    return "";
+  }
+  let obj = {"1":id};
+  var settings = {
+    "url": "https://www.google.com/adsense/service/myads/GetSearchAdNodesSettings?pid=pub-"+opts.adsenseId+"&authuser=0&tpid=pub-"+opts.adsenseId+"&ov=3&hl=en_US&rpcTrackingId=%2Fadsense%2Fservice%2Fmyads%2FGetSearchAdNodesSettings%3Fpid%3Dpub-"+opts.adsenseId+"%26authuser%3D0%26tpid%3Dpub-"+opts.adsenseId+"%26ov%3D3%26hl%3Den_US%3A1",
+    "method": "POST",
+    "timeout": 0,
+    "headers": {
+      "activitylabels": "",
+      "activityname": "myAdsSearchInitializeStyleEditor",
+      "activitytrackingid": "myads",
+      "content-type": "application/json;charset=UTF-8",
+      "x-framework-xsrf-token": opts.xsrfToken
+    },
+    "data": JSON.stringify(obj),
+  };
+
+  let res;
+  try { await $.ajax(settings) } catch (error) { res = error.responseText; }
+  return res;
+}
